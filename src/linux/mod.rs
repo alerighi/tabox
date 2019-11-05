@@ -55,7 +55,7 @@ impl Sandbox for LinuxSandbox {
                 return_code: if WIFEXITED(status) { Some(WEXITSTATUS(status)) } else { None },
                 signal: if WIFSIGNALED(status) { Some(WTERMSIG(status)) } else { None },
                 resource_usage: ResourceUsage {
-                    memory_usage: rusage.ru_maxrss as usize,
+                    memory_usage: rusage.ru_maxrss as usize * 1024,
                     user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0 + rusage.ru_utime.tv_sec as f64,
                     system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0 + rusage.ru_stime.tv_sec as f64,
                 },
@@ -126,13 +126,9 @@ impl LinuxSandbox {
 
         assert_eq!(self.config.executable.exists(), true, "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
 
-        for f in std::fs::read_dir("/").unwrap() {
-            trace!("{:?}", f);
-        }
-
         // set resource limits
         if let Some(memory_limit) = self.config.memory_limit {
-            check_syscall!(set_resource_limit(RLIMIT_RSS, memory_limit));
+            check_syscall!(set_resource_limit(RLIMIT_AS, memory_limit * 1_000_000));
         }
 
         if let Some(time_limit) = self.config.time_limit {
@@ -159,7 +155,7 @@ impl LinuxSandbox {
         if let Some(syscall_filter) = &self.config.syscall_filter {
             let mut filter = SeccompFilter::new(Action::Allow);
             for syscall in syscall_filter {
-                filter.filter(syscall, Action::Errno(13));
+                filter.filter(syscall, Action::Kill);
             }
             filter.load();
         }

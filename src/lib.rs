@@ -20,6 +20,9 @@ pub type SandboxImplementation = macos::MacOSSandbox;
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 compile_error!("Sandbox not supported on your operating system");
 
+#[cfg(test)]
+mod test;
+
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use derive_builder::Builder;
