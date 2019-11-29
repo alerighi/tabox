@@ -36,3 +36,18 @@ fn test_signal_program() {
 
     assert_eq!(result.result.status, ExitStatus::Signal(11));
 }
+
+#[test]
+fn test_env() {
+    let program = r#"
+        #include <stdio.h>
+        #include <stdlib.h>
+        int main() { printf("%s", getenv("VAR")); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+    config.env("VAR", "42");
+    let result = exec(program, &mut config, "");
+    assert_eq!(result.result.status, ExitStatus::ExitCode(0));
+    assert_eq!(result.stdout, "42");
+}

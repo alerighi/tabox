@@ -4,6 +4,8 @@
 
 extern crate env_logger;
 extern crate structopt;
+#[macro_use]
+extern crate log;
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -31,9 +33,17 @@ struct Args {
     /// Arguments to pass to the executable
     args: Vec<String>,
 
+    /// Environment to pass to the executable
+    #[structopt(long)]
+    env: Vec<String>,
+
     /// Allowed paths inside the sandbox
     #[structopt(long = "allow", short = "a")]
     allowed_paths: Vec<PathBuf>,
+
+    /// Working directory for the process. Of course must be a directory mounted
+    #[structopt(long)]
+    working_directory: Option<PathBuf>,
 
     /// Allow only these system calls in the sandbox
     #[structopt(long)]
@@ -75,45 +85,78 @@ fn main() {
         return;
     }
 
-    let mut allowed_paths: Vec<DirectoryMount> = args
-        .allowed_paths
-        .iter()
-        .map(|p| {
-            DirectoryMount::Bind(BindMount {
-                source: p.clone(),
-                target: p.clone(),
-                writable: false,
-            })
-        })
-        .collect();
+    let mut config = SandboxConfigurationBuilder::default();
 
-    if args.mount_tmp {
-        allowed_paths.push(DirectoryMount::Tmpfs(PathBuf::from("/tmp")));
+    config.executable(args.executable);
+
+    if let Some(time_limit) = args.time_limit {
+        config.time_limit(time_limit);
     }
 
-    let syscall_filter = args.syscall_filter.map(|filter| SyscallFilter {
-        default_action: SyscallFilterAction::Kill,
-        rules: filter
-            .iter()
-            .map(|p| (p.clone(), SyscallFilterAction::Allow))
-            .collect(),
-    });
+    if let Some(memory_limit) = args.memory_limit {
+        config.memory_limit(memory_limit);
+    }
 
-    let config = SandboxConfigurationBuilder::default()
-        .time_limit(args.time_limit)
-        .memory_limit(args.memory_limit)
-        .syscall_filter(syscall_filter)
-        .stdout(args.stdout)
-        .stdin(args.stdin)
-        .stderr(args.stderr)
-        .executable(args.executable)
-        .env(vec![])
-        .args(args.args)
-        .mount_paths(allowed_paths)
-        .build()
-        .unwrap();
+    if let Some(stdin) = args.stdin {
+        config.stdin(stdin);
+    }
 
-    let sandbox = SandboxImplementation::run(config).expect("Error creating sandbox");
+    if let Some(stdout) = args.stdout {
+        config.stdin(stdout);
+    }
+
+    if let Some(stderr) = args.stderr {
+        config.stdin(stderr);
+    }
+
+    if let Some(working_directory) = args.working_directory {
+        config.working_directory(working_directory);
+    }
+
+    for arg in args.args {
+        config.arg(arg);
+    }
+
+    for el in args.env {
+        let el: String = el;
+        let parts: Vec<&str> = el.split("=").collect();
+        match parts.len() {
+            1 => {
+                config.env(parts[0], std::env::var(parts[0])
+                    .expect(&format!("Variable {} not present in the environment", parts[0])));
+            },
+            2 => {
+                config.env(parts[0], parts[1]);
+            },
+            _ => panic!("Invalid env argument"),
+        }
+    }
+
+    for path in args.allowed_paths {
+        config.mount(DirectoryMount::Bind(BindMount {
+            source: path.clone(),
+            target: path.clone(),
+            writable: false,
+        }));
+    }
+
+    if args.mount_tmp {
+        config.mount(DirectoryMount::Tmpfs(PathBuf::from("/tmp")));
+    }
+
+    if let Some(syscall_filter) = args.syscall_filter {
+        config.syscall_filter(SyscallFilter {
+            default_action: SyscallFilterAction::Kill,
+            rules: syscall_filter
+                .iter()
+                .map(|p| (p.clone(), SyscallFilterAction::Allow))
+                .collect(),
+        });
+    }
+
+    trace!("Sandbox config {:#?}", config);
+
+    let sandbox = SandboxImplementation::run(config.build()).expect("Error creating sandbox");
     let result = sandbox.wait().expect("Error waiting for sandbox result");
 
     if args.json {

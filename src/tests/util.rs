@@ -49,30 +49,28 @@ pub fn exec(
 
     assert!(compile_output.status.success(), "Compilation error");
 
-    config.mount_paths(vec![
-        DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/usr"),
-            target: PathBuf::from("/usr"),
-            writable: false,
-        }),
-        DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/lib64"),
-            target: PathBuf::from("/lib64"),
-            writable: false,
-        }),
-        DirectoryMount::Bind(BindMount {
-            source: temp.path().to_owned(),
-            target: temp.path().to_owned(),
-            writable: true,
-        }),
-    ]);
+    config.mount(DirectoryMount::Bind(BindMount {
+        source: PathBuf::from("/usr"),
+        target: PathBuf::from("/usr"),
+        writable: false,
+    }));
+    config.mount(DirectoryMount::Bind(BindMount {
+        source: PathBuf::from("/lib64"),
+        target: PathBuf::from("/lib64"),
+        writable: false,
+    }));
+    config.mount(DirectoryMount::Bind(BindMount {
+        source: temp.path().to_owned(),
+        target: temp.path().to_owned(),
+        writable: true,
+    }));
     config.working_directory(PathBuf::from(temp.path()));
     config.executable(executable_path);
     config.stdin(temp.path().join("stdin.txt"));
     config.stdout(temp.path().join("stdout.txt"));
     config.stderr(temp.path().join("stderr.txt"));
 
-    let config = config.build().unwrap();
+    let config = config.clone().build();
 
     fs::write(config.stdin.as_ref().unwrap(), stdin).unwrap();
 
