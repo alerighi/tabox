@@ -7,10 +7,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str;
 
-use crate::{
-    BindMount, DirectoryMount, Sandbox, SandboxConfigurationBuilder, SandboxExecutionResult,
-    SandboxImplementation,
-};
+use crate::configuration::{BindMount, DirectoryMount, SandboxConfigurationBuilder};
+use crate::result::SandboxExecutionResult;
+use crate::{Sandbox, SandboxImplementation};
 
 pub struct ExecutionResult {
     pub result: SandboxExecutionResult,

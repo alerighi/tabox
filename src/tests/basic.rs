@@ -3,7 +3,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use super::util::*;
-use crate::{ExitStatus, SandboxConfigurationBuilder};
+use crate::configuration::SandboxConfigurationBuilder;
+use crate::result::ExitStatus;
 
 #[test]
 fn test_ok_program() {

@@ -5,10 +5,10 @@
 extern crate errno;
 extern crate seccomp_sys;
 
-use crate::{
-    DirectoryMount, ExitStatus, ResourceUsage, Result, Sandbox, SandboxConfiguration,
-    SandboxExecutionResult,
-};
+use crate::configuration::{DirectoryMount, SandboxConfiguration};
+use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
+use crate::{Result, Sandbox};
+
 use libc::*;
 use std::ffi::CString;
 use std::fs::File;

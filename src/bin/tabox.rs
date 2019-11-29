@@ -10,10 +10,10 @@ extern crate log;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tabox::{
-    BindMount, DirectoryMount, Sandbox, SandboxConfigurationBuilder, SandboxImplementation,
-    SyscallFilter, SyscallFilterAction,
+use tabox::configuration::{
+    BindMount, DirectoryMount, SandboxConfigurationBuilder, SyscallFilter, SyscallFilterAction,
 };
+use tabox::{Sandbox, SandboxImplementation};
 
 /// Command line arguments of the program
 #[derive(Debug, Clone, Serialize, Deserialize, StructOpt)]
@@ -122,12 +122,17 @@ fn main() {
         let parts: Vec<&str> = el.split("=").collect();
         match parts.len() {
             1 => {
-                config.env(parts[0], std::env::var(parts[0])
-                    .expect(&format!("Variable {} not present in the environment", parts[0])));
-            },
+                config.env(
+                    parts[0],
+                    std::env::var(parts[0]).expect(&format!(
+                        "Variable {} not present in the environment",
+                        parts[0]
+                    )),
+                );
+            }
             2 => {
                 config.env(parts[0], parts[1]);
-            },
+            }
             _ => panic!("Invalid env argument"),
         }
     }
