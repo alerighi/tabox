@@ -1,5 +1,8 @@
 # tabox
 
+[![Docs]( https://docs.rs/tabox/badge.svg)]( https://docs.rs/tabox)
+[![crates.io](https://img.shields.io/crates/v/tabox.svg)](https://crates.io/crates/tabox)
+
 A sandbox for task-maker and TuringArena
 
 #### What does it do
