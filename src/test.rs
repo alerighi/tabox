@@ -3,8 +3,8 @@ use std::str;
 use std::process::Command;
 use std::sync::Once;
 
-use crate::{SandboxConfiguration, SandboxConfigurationBuilder, SandboxExecutionResult, SandboxImplementation, Sandbox};
-use std::path::PathBuf;
+use crate::{DirectoryMount, BindMount, SandboxConfiguration, SandboxConfigurationBuilder, SandboxExecutionResult, SandboxImplementation, Sandbox, ExitStatus, SyscallFilter, SyscallFilterAction};
+use std::path::{Path, PathBuf};
 
 struct ExecutionResult {
     result: SandboxExecutionResult,
@@ -30,9 +30,21 @@ fn exec(program: &str, config: &mut SandboxConfigurationBuilder, stdin: &str) ->
     assert!(compile_output.status.success(), "Compilation error");
 
     config.mount_paths(vec![
-        PathBuf::from("/usr"),
-        PathBuf::from("/lib64"),
-        PathBuf::from(temp.path()),
+        DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/usr"),
+            target: PathBuf::from("/usr"),
+            writable: false,
+        }),
+        DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/lib64"),
+            target: PathBuf::from("/lib64"),
+            writable: false,
+        }),
+        DirectoryMount::Bind(BindMount {
+            source: temp.path().to_owned(),
+            target: temp.path().to_owned(),
+            writable: true,
+        }),
     ]);
     config.working_directory(PathBuf::from(temp.path()));
     config.executable(executable_path);
@@ -44,8 +56,11 @@ fn exec(program: &str, config: &mut SandboxConfigurationBuilder, stdin: &str) ->
 
     fs::write(config.stdin.as_ref().unwrap(), stdin).unwrap();
 
+
     let sandbox = SandboxImplementation::run(config.clone()).unwrap();
     let result = sandbox.wait().unwrap();
+
+    println!("{:?}", temp.path().read_dir());
 
     ExecutionResult {
         result,
@@ -67,8 +82,7 @@ fn test_ok_program() {
 
     let result = exec(program, &mut config, "");
 
-    assert_eq!(result.result.return_code, Some(0));
-    assert_eq!(result.result.signal, None);
+    assert!(result.result.status.is_success());
     assert_eq!(result.stdout, "hello, world!");
     assert_eq!(result.stderr, "error");
 }
@@ -84,8 +98,7 @@ fn test_signal_program() {
 
     let result = exec(program, &mut config, "");
 
-    assert_eq!(result.result.return_code, None);
-    assert_eq!(result.result.signal, Some(11));
+    assert_eq!(result.result.status, ExitStatus::Signal(11));
 }
 
 #[test]
@@ -100,8 +113,7 @@ fn test_time_limit() {
 
     let result = exec(program, &mut config, "");
 
-    assert_eq!(result.result.return_code, None);
-    assert_eq!(result.result.signal, Some(9));
+    assert_eq!(result.result.status, ExitStatus::Signal(9));
 
 }
 
@@ -117,8 +129,7 @@ fn test_memory_limit_exceeded() {
 
     let result = exec(program, &mut config, "");
 
-    assert_eq!(result.result.return_code, None);
-    assert_eq!(result.result.signal, Some(11));
+    assert_eq!(result.result.status, ExitStatus::Signal(11));
 }
 
 #[test]
@@ -134,8 +145,7 @@ fn test_memory_limit_ok() {
     let result = exec(program, &mut config, "");
 
     assert!(result.result.resource_usage.memory_usage > 200_000_000);
-    assert_eq!(result.result.return_code, Some(0));
-    assert_eq!(result.result.signal, None);
+    assert!(result.result.status.is_success());
 }
 
 #[test]
@@ -147,10 +157,12 @@ fn test_seccomp_filter() {
 
     let mut config = SandboxConfigurationBuilder::default();
     config.memory_limit(256);
-    config.syscall_filter(vec!["getuid".to_string()]);
+    config.syscall_filter(SyscallFilter {
+        default_action: SyscallFilterAction::Allow,
+        rules: vec![("getuid".to_string(), SyscallFilterAction::Kill)],
+    });
 
     let result = exec(program, &mut config, "");
 
-    assert_eq!(result.result.return_code, None);
-    assert_eq!(result.result.signal, Some(31));
+    assert_eq!(result.result.status, ExitStatus::Signal(31));
 }

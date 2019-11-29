@@ -1,10 +1,9 @@
 extern crate seccomp_sys;
 extern crate errno;
 
-use crate::{Sandbox, SandboxExecutionResult, SandboxConfiguration, ResourceUsage, Result};
+use crate::{Sandbox, SandboxExecutionResult, SandboxConfiguration, ResourceUsage, Result, DirectoryMount, ExitStatus};
 use tempdir::TempDir;
 use std::fs::File;
-use std::path::PathBuf;
 use std::ffi::CString;
 use libc::*;
 use std::ptr::null;
@@ -26,6 +25,7 @@ macro_rules! check_syscall {
 mod seccomp_filter;
 
 use seccomp_filter::*;
+use std::path::Path;
 
 pub struct LinuxSandbox {
     config: SandboxConfiguration,
@@ -52,8 +52,11 @@ impl Sandbox for LinuxSandbox {
             let mut rusage: rusage = std::mem::zeroed();
             wait4(self.child_pid, &mut status, 0, &mut rusage);
             Ok(SandboxExecutionResult {
-                return_code: if WIFEXITED(status) { Some(WEXITSTATUS(status)) } else { None },
-                signal: if WIFSIGNALED(status) { Some(WTERMSIG(status)) } else { None },
+                status: if WIFEXITED(status) {
+                    ExitStatus::ExitCode(WEXITSTATUS(status))
+                } else {
+                    ExitStatus::Signal(WTERMSIG(status))
+                },
                 resource_usage: ResourceUsage {
                     memory_usage: rusage.ru_maxrss as usize * 1024,
                     user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0 + rusage.ru_utime.tv_sec as f64,
@@ -80,18 +83,40 @@ impl LinuxSandbox {
     }
 
     /// Mount a directory inside the sandbox
-    unsafe fn mount_dir(&self, dir: &PathBuf) {
-        let dest = self.tempdir.path().join(dir.strip_prefix("/").unwrap());
+    unsafe fn mount_dir(&self, dir: &DirectoryMount) {
+        trace!("Mount {:?}", dir);
 
-        trace!("Mount {:?} to {:?}", dir, dest);
+        let prepare_dir = |dir: &Path| {
+            // Join destination with the sandbox directory
+            let target = self.tempdir.path().join(dir.strip_prefix("/").unwrap());
 
-        // create all the required directories in the destination
-        std::fs::create_dir_all(&dest).unwrap();
+            // Create all the required directories in the destination
+            std::fs::create_dir_all(&target).unwrap();
 
-        let src = CString::new(dir.to_str().unwrap()).unwrap();
-        let dest = CString::new(dest.to_str().unwrap()).unwrap();
+            // Convert to C string
+            CString::new(target.to_str().unwrap()).unwrap()
+        };
+        
+        match dir {
+            DirectoryMount::Bind(bind) => {
+                let target = prepare_dir(&bind.target);
+                let source = CString::new(bind.source.to_str().unwrap()).unwrap();
 
-        check_syscall!(mount(src.as_ptr(), dest.as_ptr(), null(), MS_BIND | MS_REC, null()));
+                check_syscall!(mount(source.as_ptr(), target.as_ptr(), null(), MS_BIND | MS_REC, null()));
+
+                if !bind.writable {
+                    check_syscall!(mount(null(), target.as_ptr(), null(), MS_REMOUNT | MS_RDONLY | MS_BIND, null()));
+                }
+            },
+            DirectoryMount::Tmpfs(path) => {
+                let target = prepare_dir(path);
+
+                // Mount a tmpfs
+                let tmpfs = CString::new("tmpfs").unwrap();
+
+                check_syscall!(mount(tmpfs.as_ptr(), target.as_ptr(), tmpfs.as_ptr(), 0, null()));
+            },
+        }
     }
 
     unsafe fn child(&self) -> ! {
@@ -118,15 +143,15 @@ impl LinuxSandbox {
             self.mount_dir(dir);
         }
 
-        // chroot into the sandbox
+        // Chroot into the sandbox
         check_syscall!(chroot(CString::new(sandbox_path.to_str().unwrap()).unwrap().as_ptr()));
 
-        // change to the working directory
+        // Change to the working directory
         check_syscall!(chdir(CString::new(self.config.working_directory.to_str().unwrap()).unwrap().as_ptr()));
 
         assert_eq!(self.config.executable.exists(), true, "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
 
-        // set resource limits
+        // Set resource limits
         if let Some(memory_limit) = self.config.memory_limit {
             check_syscall!(set_resource_limit(RLIMIT_AS, memory_limit * 1_000_000));
         }
@@ -135,51 +160,55 @@ impl LinuxSandbox {
             check_syscall!(set_resource_limit(RLIMIT_CPU, time_limit));
         }
 
-        // setup io redirection
+        // Setup io redirection
         if let Some(stdin) = &self.config.stdin {
-            let file = File::open(stdin).unwrap();
+            let file = File::open(&stdin)
+                .expect(&format!("Cannot open stdin file {:?} for reading", stdin));
             check_syscall!(dup2(file.into_raw_fd(), 0));
         }
 
         if let Some(stdout) = &self.config.stdout {
-            let file = File::create(stdout).unwrap();
+            let file = File::create(stdout)
+                .expect(&format!("Cannot open stdout file {:?} for writing", stdout));
             check_syscall!(dup2(file.into_raw_fd(), 1));
         }
 
         if let Some(stderr) = &self.config.stderr {
-            let file = File::create(stderr).unwrap();
+            let file = File::create(stderr)
+                .expect(&format!("Cannot open stderr file {:?} for writing", stderr));
             check_syscall!(dup2(file.into_raw_fd(), 2));
         }
 
-        // setup syscall filter
+        // Setup syscall filter
         if let Some(syscall_filter) = &self.config.syscall_filter {
-            let mut filter = SeccompFilter::new(Action::Allow);
-            for syscall in syscall_filter {
-                filter.filter(syscall, Action::Kill);
+            let mut filter = SeccompFilter::new(syscall_filter.default_action);
+            for (syscall, action) in &syscall_filter.rules {
+                filter.filter(syscall, *action);
             }
             filter.load();
         }
 
         let exe = CString::new(self.config.executable.to_str().unwrap()).unwrap();
 
-        // build args array
+        // Build args array
         let args: Vec<CString> = self.config.args.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
         let mut argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
         argv.insert(0, exe.as_ptr()); // set executable name
         argv.push(null());  // null terminate
 
-        // build environment array
-        let env: Vec<CString> = self.config.env.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+        // Build environment array
+        let mut env: Vec<CString> = Vec::new();
+        for (variable, value) in &self.config.env {
+            env.push(CString::new(format!("{}={}", variable, value)).unwrap());
+        }
         let mut envp: Vec<*const c_char> = env.iter().map(|s| s.as_ptr()).collect();
         envp.push(null()); // null terminate
 
-        // exec the sandbox
+        // Exec the sandbox
         check_syscall!(execve(exe.as_ptr(), argv.as_ptr(), envp.as_ptr()));
 
-        // should never be reached!
-        panic!("Something went seriously wrong");
+        unreachable!("Something went seriously wrong");
     }
-
 }
 
 /// Utility function to set resource limit

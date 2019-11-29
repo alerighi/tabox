@@ -1,7 +1,7 @@
 extern crate structopt;
 extern crate env_logger;
 
-use tabox::{SandboxImplementation, Sandbox, SandboxConfigurationBuilder};
+use tabox::{SandboxImplementation, Sandbox, SandboxConfigurationBuilder, DirectoryMount, SyscallFilter, SyscallFilterAction, BindMount};
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
@@ -31,7 +31,7 @@ struct Args {
     #[structopt(long = "allow", short = "a")]
     allowed_paths: Vec<PathBuf>,
 
-    /// Deny these system calls in the sandbox
+    /// Allow only these system calls in the sandbox
     #[structopt(long)]
     syscall_filter: Option<Vec<String>>,
 
@@ -54,6 +54,10 @@ struct Args {
     /// output in JSON format
     #[structopt(long, short)]
     json: bool,
+
+    /// Mount a tmpfs in /tmp
+    #[structopt(long)]
+    mount_tmp: bool
 }
 
 fn main() {
@@ -67,17 +71,32 @@ fn main() {
         return;
     }
 
+    let mut allowed_paths: Vec<DirectoryMount> = args.allowed_paths.iter().map(|p| DirectoryMount::Bind(BindMount {
+        source: p.clone(),
+        target: p.clone(),
+        writable: false,
+    })).collect();
+
+    if args.mount_tmp {
+        allowed_paths.push(DirectoryMount::Tmpfs(PathBuf::from("/tmp")));
+    }
+
+    let syscall_filter = args.syscall_filter.map(|filter| SyscallFilter {
+        default_action: SyscallFilterAction::Kill,
+        rules: filter.iter().map(|p| (p.clone(), SyscallFilterAction::Allow)).collect(),
+    });
+
     let config = SandboxConfigurationBuilder::default()
         .time_limit(args.time_limit)
         .memory_limit(args.memory_limit)
-        .syscall_filter(args.syscall_filter)
+        .syscall_filter(syscall_filter)
         .stdout(args.stdout)
         .stdin(args.stdin)
         .stderr(args.stderr)
         .executable(args.executable)
         .env(vec![])
         .args(args.args)
-        .mount_paths(args.allowed_paths)
+        .mount_paths(allowed_paths)
         .build()
         .unwrap();
 

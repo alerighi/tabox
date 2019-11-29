@@ -1,30 +1,13 @@
 use seccomp_sys::*;
 use std::ffi::CString;
+use crate::SyscallFilterAction;
 
-/// Default seccomp policy
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub enum Action {
-    /// Allow all system calls
-    Allow,
-
-    /// Kill the process
-    Kill,
-
-    /// Trap the process
-    Trap,
-
-    /// Return error number
-    Errno(u32),
-}
-
-impl Action {
+impl SyscallFilterAction {
     fn to_seccomp_param(&self) -> u32 {
         match self {
-            Action::Allow => SCMP_ACT_ALLOW,
-            Action::Kill => SCMP_ACT_KILL,
-            Action::Trap => SCMP_ACT_TRAP,
-            Action::Errno(errno) => SCMP_ACT_ERRNO(*errno),
+            SyscallFilterAction::Allow => SCMP_ACT_ALLOW,
+            SyscallFilterAction::Kill => SCMP_ACT_KILL,
+            SyscallFilterAction::Errno(errno) => SCMP_ACT_ERRNO(*errno),
         }
     }
 }
@@ -35,7 +18,7 @@ pub struct SeccompFilter {
 
 impl SeccompFilter {
     /// Create a new filter
-    pub fn new(default_action: Action) -> SeccompFilter {
+    pub fn new(default_action: SyscallFilterAction) -> SeccompFilter {
         let ctx = unsafe { seccomp_init(default_action.to_seccomp_param()) };
         if ctx.is_null() {
             panic!("Error initializing seccomp filter");
@@ -46,7 +29,7 @@ impl SeccompFilter {
     }
 
     /// Allow a syscall
-    pub fn filter(&mut self, name: &str, action: Action) {
+    pub fn filter(&mut self, name: &str, action: SyscallFilterAction) {
         let syscall_name = CString::new(name).unwrap();
         unsafe {
             let syscall_num = check_syscall!(seccomp_syscall_resolve_name(syscall_name.as_ptr()));
