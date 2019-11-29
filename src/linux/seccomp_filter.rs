@@ -1,8 +1,13 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use crate::SyscallFilterAction;
 use seccomp_sys::*;
 use std::ffi::CString;
 
 impl SyscallFilterAction {
+    /// Transform the Action to the correct seccomp parameter
     fn to_seccomp_param(&self) -> u32 {
         match self {
             SyscallFilterAction::Allow => SCMP_ACT_ALLOW,
@@ -12,6 +17,7 @@ impl SyscallFilterAction {
     }
 }
 
+/// Wrapper of a libseccomp filter object
 pub struct SeccompFilter {
     ctx: *mut scmp_filter_ctx,
 }
