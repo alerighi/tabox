@@ -1,25 +1,31 @@
-extern crate seccomp_sys;
 extern crate errno;
+extern crate seccomp_sys;
 
-use crate::{Sandbox, SandboxExecutionResult, SandboxConfiguration, ResourceUsage, Result, DirectoryMount, ExitStatus};
-use tempdir::TempDir;
-use std::fs::File;
-use std::ffi::CString;
+use crate::{
+    DirectoryMount, ExitStatus, ResourceUsage, Result, Sandbox, SandboxConfiguration,
+    SandboxExecutionResult,
+};
 use libc::*;
-use std::ptr::null;
+use std::ffi::CString;
+use std::fs::File;
 use std::os::unix::io::IntoRawFd;
+use std::ptr::null;
+use tempdir::TempDir;
 
 macro_rules! check_syscall {
-    ($call:expr) => {
-        {
-            let result = $call;
-            trace!("{} = {}", stringify!($call), result);
-            if result < 0 {
-                panic!("{} failed with exit code {} ({})", stringify!($call), result, errno::errno());
-            }
-            result
+    ($call:expr) => {{
+        let result = $call;
+        trace!("{} = {}", stringify!($call), result);
+        if result < 0 {
+            panic!(
+                "{} failed with exit code {} ({})",
+                stringify!($call),
+                result,
+                errno::errno()
+            );
         }
-    }
+        result
+    }};
 }
 
 mod seccomp_filter;
@@ -46,7 +52,11 @@ impl Sandbox for LinuxSandbox {
     }
 
     fn wait(self) -> Result<SandboxExecutionResult> {
-        trace!("Sandbox (dir = {:?}) waiting for child (PID = {}) completion", self.tempdir, self.child_pid);
+        trace!(
+            "Sandbox (dir = {:?}) waiting for child (PID = {}) completion",
+            self.tempdir,
+            self.child_pid
+        );
         unsafe {
             let mut status = 0;
             let mut rusage: rusage = std::mem::zeroed();
@@ -59,8 +69,10 @@ impl Sandbox for LinuxSandbox {
                 },
                 resource_usage: ResourceUsage {
                     memory_usage: rusage.ru_maxrss as usize * 1024,
-                    user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0 + rusage.ru_utime.tv_sec as f64,
-                    system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0 + rusage.ru_stime.tv_sec as f64,
+                    user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0
+                        + rusage.ru_utime.tv_sec as f64,
+                    system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
+                        + rusage.ru_stime.tv_sec as f64,
                 },
             })
         }
@@ -72,14 +84,17 @@ impl Sandbox for LinuxSandbox {
 }
 
 impl LinuxSandbox {
-
     /// Forks a sandbox child
     unsafe fn start_process(&mut self) {
         self.child_pid = match check_syscall!(fork()) {
             0 => self.child(),
             pid => pid,
         };
-        trace!("Sandbox (dir = {:?}) forked PID = {}", self.tempdir, self.child_pid);
+        trace!(
+            "Sandbox (dir = {:?}) forked PID = {}",
+            self.tempdir,
+            self.child_pid
+        );
     }
 
     /// Mount a directory inside the sandbox
@@ -96,26 +111,44 @@ impl LinuxSandbox {
             // Convert to C string
             CString::new(target.to_str().unwrap()).unwrap()
         };
-        
+
         match dir {
             DirectoryMount::Bind(bind) => {
                 let target = prepare_dir(&bind.target);
                 let source = CString::new(bind.source.to_str().unwrap()).unwrap();
 
-                check_syscall!(mount(source.as_ptr(), target.as_ptr(), null(), MS_BIND | MS_REC, null()));
+                check_syscall!(mount(
+                    source.as_ptr(),
+                    target.as_ptr(),
+                    null(),
+                    MS_BIND | MS_REC,
+                    null()
+                ));
 
                 if !bind.writable {
-                    check_syscall!(mount(null(), target.as_ptr(), null(), MS_REMOUNT | MS_RDONLY | MS_BIND, null()));
+                    check_syscall!(mount(
+                        null(),
+                        target.as_ptr(),
+                        null(),
+                        MS_REMOUNT | MS_RDONLY | MS_BIND,
+                        null()
+                    ));
                 }
-            },
+            }
             DirectoryMount::Tmpfs(path) => {
                 let target = prepare_dir(path);
 
                 // Mount a tmpfs
                 let tmpfs = CString::new("tmpfs").unwrap();
 
-                check_syscall!(mount(tmpfs.as_ptr(), target.as_ptr(), tmpfs.as_ptr(), 0, null()));
-            },
+                check_syscall!(mount(
+                    tmpfs.as_ptr(),
+                    target.as_ptr(),
+                    tmpfs.as_ptr(),
+                    0,
+                    null()
+                ));
+            }
         }
     }
 
@@ -127,7 +160,9 @@ impl LinuxSandbox {
         let gid = getgid();
 
         // enter unshared namespace
-        check_syscall!(unshare(CLONE_NEWIPC | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUSER | CLONE_NEWUTS));
+        check_syscall!(unshare(
+            CLONE_NEWIPC | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUSER | CLONE_NEWUTS
+        ));
 
         // map current uid/gid to root/root inside the sandbox
         std::fs::write("/proc/self/setgroups", "deny").unwrap();
@@ -144,10 +179,18 @@ impl LinuxSandbox {
         }
 
         // Chroot into the sandbox
-        check_syscall!(chroot(CString::new(sandbox_path.to_str().unwrap()).unwrap().as_ptr()));
+        check_syscall!(chroot(
+            CString::new(sandbox_path.to_str().unwrap())
+                .unwrap()
+                .as_ptr()
+        ));
 
         // Change to the working directory
-        check_syscall!(chdir(CString::new(self.config.working_directory.to_str().unwrap()).unwrap().as_ptr()));
+        check_syscall!(chdir(
+            CString::new(self.config.working_directory.to_str().unwrap())
+                .unwrap()
+                .as_ptr()
+        ));
 
         assert_eq!(self.config.executable.exists(), true, "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
 
@@ -191,10 +234,15 @@ impl LinuxSandbox {
         let exe = CString::new(self.config.executable.to_str().unwrap()).unwrap();
 
         // Build args array
-        let args: Vec<CString> = self.config.args.iter().map(|s| CString::new(s.as_str()).unwrap()).collect();
+        let args: Vec<CString> = self
+            .config
+            .args
+            .iter()
+            .map(|s| CString::new(s.as_str()).unwrap())
+            .collect();
         let mut argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
         argv.insert(0, exe.as_ptr()); // set executable name
-        argv.push(null());  // null terminate
+        argv.push(null()); // null terminate
 
         // Build environment array
         let mut env: Vec<CString> = Vec::new();

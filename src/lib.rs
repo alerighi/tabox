@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate log;
+extern crate derive_builder;
 extern crate serde;
 extern crate serde_json;
-extern crate derive_builder;
 extern crate tempdir;
 
 #[cfg(target_os = "linux")]
@@ -21,11 +21,11 @@ pub type SandboxImplementation = macos::MacOSSandbox;
 compile_error!("Sandbox not supported on your operating system");
 
 #[cfg(test)]
-mod test;
+mod tests;
 
-use std::path::{PathBuf, Path};
-use serde::{Serialize, Deserialize};
 use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Convenience result type
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -167,7 +167,9 @@ pub struct SandboxExecutionResult {
 
 pub trait Sandbox {
     /// Execute the sandbox
-    fn run(config: SandboxConfiguration) -> Result<Self> where Self: Sized;
+    fn run(config: SandboxConfiguration) -> Result<Self>
+    where
+        Self: Sized;
 
     /// Wait the process to terminate, giving back the execution result
     fn wait(self) -> Result<SandboxExecutionResult>;

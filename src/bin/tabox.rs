@@ -1,17 +1,17 @@
-extern crate structopt;
 extern crate env_logger;
+extern crate structopt;
 
-use tabox::{SandboxImplementation, Sandbox, SandboxConfigurationBuilder, DirectoryMount, SyscallFilter, SyscallFilterAction, BindMount};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
 use structopt::StructOpt;
+use tabox::{
+    BindMount, DirectoryMount, Sandbox, SandboxConfigurationBuilder, SandboxImplementation,
+    SyscallFilter, SyscallFilterAction,
+};
 
 /// Command line arguments of the program
 #[derive(Debug, Clone, Serialize, Deserialize, StructOpt)]
-#[structopt(
-    name = "tabox",
-    about = "Execute code in a secure sandbox",
-)]
+#[structopt(name = "tabox", about = "Execute code in a secure sandbox")]
 struct Args {
     /// Time limit for the execution
     #[structopt(long, short)]
@@ -57,7 +57,7 @@ struct Args {
 
     /// Mount a tmpfs in /tmp
     #[structopt(long)]
-    mount_tmp: bool
+    mount_tmp: bool,
 }
 
 fn main() {
@@ -71,11 +71,17 @@ fn main() {
         return;
     }
 
-    let mut allowed_paths: Vec<DirectoryMount> = args.allowed_paths.iter().map(|p| DirectoryMount::Bind(BindMount {
-        source: p.clone(),
-        target: p.clone(),
-        writable: false,
-    })).collect();
+    let mut allowed_paths: Vec<DirectoryMount> = args
+        .allowed_paths
+        .iter()
+        .map(|p| {
+            DirectoryMount::Bind(BindMount {
+                source: p.clone(),
+                target: p.clone(),
+                writable: false,
+            })
+        })
+        .collect();
 
     if args.mount_tmp {
         allowed_paths.push(DirectoryMount::Tmpfs(PathBuf::from("/tmp")));
@@ -83,7 +89,10 @@ fn main() {
 
     let syscall_filter = args.syscall_filter.map(|filter| SyscallFilter {
         default_action: SyscallFilterAction::Kill,
-        rules: filter.iter().map(|p| (p.clone(), SyscallFilterAction::Allow)).collect(),
+        rules: filter
+            .iter()
+            .map(|p| (p.clone(), SyscallFilterAction::Allow))
+            .collect(),
     });
 
     let config = SandboxConfigurationBuilder::default()
@@ -100,10 +109,8 @@ fn main() {
         .build()
         .unwrap();
 
-    let sandbox = SandboxImplementation::run(config)
-        .expect("Error creating sandbox");
-    let result = sandbox.wait()
-        .expect("Error waiting for sandbox result");
+    let sandbox = SandboxImplementation::run(config).expect("Error creating sandbox");
+    let result = sandbox.wait().expect("Error waiting for sandbox result");
 
     if args.json {
         println!("{}", serde_json::to_string(&result).unwrap());

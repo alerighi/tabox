@@ -1,6 +1,6 @@
+use crate::SyscallFilterAction;
 use seccomp_sys::*;
 use std::ffi::CString;
-use crate::SyscallFilterAction;
 
 impl SyscallFilterAction {
     fn to_seccomp_param(&self) -> u32 {
@@ -23,9 +23,7 @@ impl SeccompFilter {
         if ctx.is_null() {
             panic!("Error initializing seccomp filter");
         }
-        SeccompFilter {
-            ctx,
-        }
+        SeccompFilter { ctx }
     }
 
     /// Allow a syscall
@@ -33,7 +31,12 @@ impl SeccompFilter {
         let syscall_name = CString::new(name).unwrap();
         unsafe {
             let syscall_num = check_syscall!(seccomp_syscall_resolve_name(syscall_name.as_ptr()));
-            check_syscall!(seccomp_rule_add(self.ctx, action.to_seccomp_param(), syscall_num, 0));
+            check_syscall!(seccomp_rule_add(
+                self.ctx,
+                action.to_seccomp_param(),
+                syscall_num,
+                0
+            ));
         }
     }
 

@@ -1,4 +1,4 @@
-use crate::{Sandbox, SandboxExecutionResult, SandboxConfiguration, Result};
+use crate::{Result, Sandbox, SandboxConfiguration, SandboxExecutionResult};
 use std::error::Error;
 
 pub struct MacOSSandbox {}
