@@ -1,6 +1,6 @@
 # tabox
 
-## tmbox
+## TaBox
 
 A sandbox for task-maker and TuringArena
 
