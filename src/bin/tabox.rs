@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 extern crate env_logger;
+extern crate serde_json;
 extern crate structopt;
 #[macro_use]
 extern crate log;
@@ -10,9 +11,8 @@ extern crate log;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tabox::configuration::{
-    BindMount, DirectoryMount, SandboxConfigurationBuilder, SyscallFilter, SyscallFilterAction,
-};
+use tabox::configuration::{BindMount, DirectoryMount, SandboxConfigurationBuilder};
+use tabox::syscall_filter::SyscallFilter;
 use tabox::{Sandbox, SandboxImplementation};
 
 /// Command line arguments of the program
@@ -37,17 +37,21 @@ struct Args {
     #[structopt(long)]
     env: Vec<String>,
 
-    /// Allowed paths inside the sandbox
-    #[structopt(long = "allow", short = "a")]
-    allowed_paths: Vec<PathBuf>,
+    /// Mount paths inside the sandbox
+    #[structopt(long = "mount")]
+    mount: Vec<String>,
 
     /// Working directory for the process. Of course must be a directory mounted
     #[structopt(long)]
     working_directory: Option<PathBuf>,
 
-    /// Allow only these system calls in the sandbox
+    /// Allow chmod
     #[structopt(long)]
-    syscall_filter: Option<Vec<String>>,
+    allow_chmod: bool,
+
+    /// Allow process/thread creation in the sandbox
+    #[structopt(long)]
+    allow_multiprocess: bool,
 
     /// Redirect stdin from this file
     #[structopt(long, short = "i")]
@@ -69,9 +73,9 @@ struct Args {
     #[structopt(long, short)]
     json: bool,
 
-    /// Mount a tmpfs in /tmp
+    /// Mount a tmpfs in /tmp and /dev/shm
     #[structopt(long)]
-    mount_tmp: bool,
+    mount_tmpfs: bool,
 }
 
 fn main() {
@@ -87,7 +91,9 @@ fn main() {
 
     let mut config = SandboxConfigurationBuilder::default();
 
-    config.executable(args.executable);
+    config
+        .executable(args.executable)
+        .mount_tmpfs(args.mount_tmpfs);
 
     if let Some(time_limit) = args.time_limit {
         config.time_limit(time_limit);
@@ -102,11 +108,11 @@ fn main() {
     }
 
     if let Some(stdout) = args.stdout {
-        config.stdin(stdout);
+        config.stdout(stdout);
     }
 
     if let Some(stderr) = args.stderr {
-        config.stdin(stderr);
+        config.stderr(stderr);
     }
 
     if let Some(working_directory) = args.working_directory {
@@ -118,7 +124,6 @@ fn main() {
     }
 
     for el in args.env {
-        let el: String = el;
         let parts: Vec<&str> = el.split("=").collect();
         match parts.len() {
             1 => {
@@ -137,27 +142,27 @@ fn main() {
         }
     }
 
-    for path in args.allowed_paths {
+    for path in args.mount {
+        let parts: Vec<&str> = path.split(",").collect();
+        if parts.len() > 2 {
+            panic!("Invalid path parameter");
+        }
+        let writable = if parts.len() == 2 {
+            parts[1] == "rw"
+        } else {
+            false
+        };
         config.mount(DirectoryMount::Bind(BindMount {
-            source: path.clone(),
-            target: path.clone(),
-            writable: false,
+            source: PathBuf::from(parts[0]),
+            target: PathBuf::from(parts[0]),
+            writable,
         }));
     }
 
-    if args.mount_tmp {
-        config.mount(DirectoryMount::Tmpfs(PathBuf::from("/tmp")));
-    }
-
-    if let Some(syscall_filter) = args.syscall_filter {
-        config.syscall_filter(SyscallFilter {
-            default_action: SyscallFilterAction::Kill,
-            rules: syscall_filter
-                .iter()
-                .map(|p| (p.clone(), SyscallFilterAction::Allow))
-                .collect(),
-        });
-    }
+    config.syscall_filter(SyscallFilter::build(
+        args.allow_multiprocess,
+        args.allow_chmod,
+    ));
 
     trace!("Sandbox config {:#?}", config);
 

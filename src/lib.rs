@@ -16,10 +16,10 @@
 extern crate log;
 extern crate serde;
 extern crate serde_json;
-extern crate tempdir;
 
 pub mod configuration;
 pub mod result;
+pub mod syscall_filter;
 
 #[cfg(target_os = "linux")]
 mod linux;

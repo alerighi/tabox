@@ -11,6 +11,7 @@ use crate::configuration::{BindMount, DirectoryMount, SandboxConfigurationBuilde
 use crate::result::SandboxExecutionResult;
 use crate::{Sandbox, SandboxImplementation};
 
+#[derive(Debug)]
 pub struct ExecutionResult {
     pub result: SandboxExecutionResult,
     pub stdout: String,
@@ -48,26 +49,43 @@ pub fn exec(
 
     assert!(compile_output.status.success(), "Compilation error");
 
-    config.mount(DirectoryMount::Bind(BindMount {
-        source: PathBuf::from("/usr"),
-        target: PathBuf::from("/usr"),
-        writable: false,
-    }));
-    config.mount(DirectoryMount::Bind(BindMount {
-        source: PathBuf::from("/lib64"),
-        target: PathBuf::from("/lib64"),
-        writable: false,
-    }));
-    config.mount(DirectoryMount::Bind(BindMount {
-        source: temp.path().to_owned(),
-        target: temp.path().to_owned(),
-        writable: true,
-    }));
-    config.working_directory(PathBuf::from(temp.path()));
-    config.executable(executable_path);
-    config.stdin(temp.path().join("stdin.txt"));
-    config.stdout(temp.path().join("stdout.txt"));
-    config.stderr(temp.path().join("stderr.txt"));
+    config
+        .mount(DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/usr"),
+            target: PathBuf::from("/usr"),
+            writable: false,
+        }))
+        .mount(DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/lib64"),
+            target: PathBuf::from("/lib64"),
+            writable: false,
+        }))
+        .mount(DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/lib"),
+            target: PathBuf::from("/lib"),
+            writable: false,
+        }))
+        .mount(DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/bin"),
+            target: PathBuf::from("/bin"),
+            writable: false,
+        }))
+        .mount(DirectoryMount::Bind(BindMount {
+            source: PathBuf::from("/etc"),
+            target: PathBuf::from("/etc"),
+            writable: false,
+        }))
+        .mount(DirectoryMount::Bind(BindMount {
+            source: temp.path().to_owned(),
+            target: temp.path().to_owned(),
+            writable: true,
+        }))
+        .mount_tmpfs(true)
+        .working_directory(PathBuf::from(temp.path()))
+        .executable(executable_path)
+        .stdin(temp.path().join("stdin.txt"))
+        .stdout(temp.path().join("stdout.txt"))
+        .stderr(temp.path().join("stderr.txt"));
 
     let config = config.clone().build();
 
@@ -76,9 +94,11 @@ pub fn exec(
     let sandbox = SandboxImplementation::run(config.clone()).unwrap();
     let result = sandbox.wait().unwrap();
 
-    ExecutionResult {
+    let execution_result = ExecutionResult {
         result,
         stdout: fs::read_to_string(&config.stdout.unwrap()).unwrap(),
         stderr: fs::read_to_string(&config.stderr.unwrap()).unwrap(),
-    }
+    };
+    eprintln!("Result = {:?}", execution_result);
+    execution_result
 }

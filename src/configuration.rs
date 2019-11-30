@@ -1,3 +1,4 @@
+use crate::syscall_filter::SyscallFilter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -22,30 +23,6 @@ pub enum DirectoryMount {
 
     /// Mount a tmpfs in the specified path
     Tmpfs(PathBuf),
-}
-
-/// System call filter action
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
-pub enum SyscallFilterAction {
-    /// Allow all system calls
-    Allow,
-
-    /// Kill the process
-    Kill,
-
-    /// Return this errno
-    Errno(u32),
-}
-
-/// Syscall filter configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SyscallFilter {
-    /// Default action to execute
-    pub default_action: SyscallFilterAction,
-
-    /// Sandbox filter rules in the form of (syscall_name, action)
-    pub rules: Vec<(String, SyscallFilterAction)>,
 }
 
 /// struct that represents the configuration parameters
@@ -84,6 +61,9 @@ pub struct SandboxConfiguration {
 
     /// Allow only these system calls in the sandbox
     pub syscall_filter: Option<SyscallFilter>,
+
+    /// Mount a r/w tmpfs in /tmp and /dev/shm
+    pub mount_tmpfs: bool,
 }
 
 /// Builder for the SandboxConfiguration
@@ -100,6 +80,7 @@ pub struct SandboxConfigurationBuilder {
     stdout: Option<PathBuf>,
     stderr: Option<PathBuf>,
     syscall_filter: Option<SyscallFilter>,
+    mount_tmpfs: bool,
 }
 
 impl Default for SandboxConfigurationBuilder {
@@ -116,6 +97,7 @@ impl Default for SandboxConfigurationBuilder {
             stdout: None,
             stderr: None,
             syscall_filter: None,
+            mount_tmpfs: false,
         }
     }
 }
@@ -135,72 +117,79 @@ impl SandboxConfigurationBuilder {
             stdout: self.stdout,
             stderr: self.stderr,
             syscall_filter: self.syscall_filter,
+            mount_tmpfs: self.mount_tmpfs,
         }
     }
 
     /// Set the time limit
-    pub fn time_limit(&mut self, time_limit: u64) -> &Self {
+    pub fn time_limit(&mut self, time_limit: u64) -> &mut Self {
         self.time_limit = Some(time_limit);
         self
     }
 
     /// Set the memory limit
-    pub fn memory_limit(&mut self, memory_limit: u64) -> &Self {
+    pub fn memory_limit(&mut self, memory_limit: u64) -> &mut Self {
         self.memory_limit = Some(memory_limit);
         self
     }
 
     /// Set the standard input file path
-    pub fn stdin(&mut self, stdin: PathBuf) -> &Self {
+    pub fn stdin(&mut self, stdin: PathBuf) -> &mut Self {
         self.stdin = Some(stdin);
         self
     }
 
     /// Set the standard output file path
-    pub fn stdout(&mut self, stdout: PathBuf) -> &Self {
+    pub fn stdout(&mut self, stdout: PathBuf) -> &mut Self {
         self.stdout = Some(stdout);
         self
     }
 
     /// Set the standard error file path
-    pub fn stderr(&mut self, stderr: PathBuf) -> &Self {
+    pub fn stderr(&mut self, stderr: PathBuf) -> &mut Self {
         self.stderr = Some(stderr);
         self
     }
 
     /// Set the executable file path
-    pub fn executable<P: Into<PathBuf>>(&mut self, executable: P) -> &Self {
+    pub fn executable<P: Into<PathBuf>>(&mut self, executable: P) -> &mut Self {
         self.executable = executable.into();
         self
     }
 
     /// Set the working directory
-    pub fn working_directory<P: Into<PathBuf>>(&mut self, working_directory: P) -> &Self {
+    pub fn working_directory<P: Into<PathBuf>>(&mut self, working_directory: P) -> &mut Self {
         self.working_directory = working_directory.into();
         self
     }
 
     /// Add an argument to the program
-    pub fn arg<S: Into<String>>(&mut self, arg: S) -> &Self {
+    pub fn arg<S: Into<String>>(&mut self, arg: S) -> &mut Self {
         self.args.push(arg.into());
         self
     }
 
     /// Add an argument to the environment
-    pub fn env<S: Into<String>, T: Into<String>>(&mut self, variable: S, value: T) -> &Self {
+    pub fn env<S: Into<String>, T: Into<String>>(&mut self, variable: S, value: T) -> &mut Self {
         self.env.push((variable.into(), value.into()));
         self
     }
 
     /// Add a mount point into the sandbox
-    pub fn mount(&mut self, mount: DirectoryMount) -> &Self {
+    pub fn mount(&mut self, mount: DirectoryMount) -> &mut Self {
         self.mount_paths.push(mount);
         self
     }
 
     /// Install the syscall filter
-    pub fn syscall_filter(&mut self, filter: SyscallFilter) -> &Self {
+    pub fn syscall_filter(&mut self, filter: SyscallFilter) -> &mut Self {
         self.syscall_filter = Some(filter);
+        self
+    }
+
+    /// Mount a r/w tmpfs in /tmp and /dev/shm
+    pub fn mount_tmpfs(&mut self, value: bool) -> &mut Self {
+        self.mount_tmpfs = value;
         self
     }
 }

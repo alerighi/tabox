@@ -3,8 +3,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use super::util::*;
-use crate::configuration::{SandboxConfigurationBuilder, SyscallFilter, SyscallFilterAction};
+use crate::configuration::SandboxConfigurationBuilder;
 use crate::result::ExitStatus;
+use crate::syscall_filter::{SyscallFilter, SyscallFilterAction};
 
 #[test]
 fn test_seccomp_filter() {

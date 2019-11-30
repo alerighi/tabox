@@ -2,17 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use crate::configuration::SyscallFilterAction;
+use crate::syscall_filter::SyscallFilterAction;
 use seccomp_sys::*;
 use std::ffi::CString;
 
 impl SyscallFilterAction {
     /// Transform the Action to the correct seccomp parameter
-    fn to_seccomp_param(&self) -> u32 {
+    fn to_seccomp_param(self) -> u32 {
         match self {
             SyscallFilterAction::Allow => SCMP_ACT_ALLOW,
             SyscallFilterAction::Kill => SCMP_ACT_KILL,
-            SyscallFilterAction::Errno(errno) => SCMP_ACT_ERRNO(*errno),
+            SyscallFilterAction::Errno(errno) => SCMP_ACT_ERRNO(errno),
         }
     }
 }
@@ -34,6 +34,7 @@ impl SeccompFilter {
 
     /// Allow a syscall
     pub fn filter(&mut self, name: &str, action: SyscallFilterAction) {
+        debug!("Add rule {} {:?}", name, action);
         let syscall_name = CString::new(name).unwrap();
         unsafe {
             let syscall_num = check_syscall!(seccomp_syscall_resolve_name(syscall_name.as_ptr()));

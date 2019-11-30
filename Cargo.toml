@@ -14,18 +14,24 @@ repository = "https://alerighi.github.io/tabox"
 documentation = "https://docs.rs/tabox"
 default-run = "tabox"
 
+[[bin]]
+name = "tabox"
+required-features = ["binary"]
+
+[features]
+binary = ["structopt", "env_logger"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-libc = "0.2"
 log = "0.4"
-fs_extra = "1.1"
-tempdir = "0.3"
 
 # tmbox binary dependencies
-structopt = "0.3"
-env_logger = "0.7"
+structopt = { version = "0.3", optional = true }
+env_logger = { version = "0.7", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 seccomp-sys = "0.1"
 errno = "0.2"
+libc = "0.2"
+tempdir = "0.3"
