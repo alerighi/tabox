@@ -17,7 +17,11 @@ use tabox::{Sandbox, SandboxImplementation};
 
 /// Command line arguments of the program
 #[derive(Debug, Clone, Serialize, Deserialize, StructOpt)]
-#[structopt(name = "tabox", about = "Execute code in a secure sandbox")]
+#[structopt(
+    name = "tabox",
+    about = "Execute code in a secure sandbox",
+    setting = structopt::clap::AppSettings::ColoredHelp)
+]
 struct Args {
     /// Time limit for the execution
     #[structopt(long, short)]

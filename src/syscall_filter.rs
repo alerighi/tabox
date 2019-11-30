@@ -62,7 +62,11 @@ impl SyscallFilter {
     }
 
     /// Add a rule to the filter
-    pub fn add_rule<S: Into<String>>(&mut self, syscall: S, action: SyscallFilterAction) -> &mut Self {
+    pub fn add_rule<S: Into<String>>(
+        &mut self,
+        syscall: S,
+        action: SyscallFilterAction,
+    ) -> &mut Self {
         self.rules.push((syscall.into(), action));
         self
     }
