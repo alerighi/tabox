@@ -87,19 +87,3 @@ fn test_write_tmp() {
 
     assert_eq!(result.result.status, ExitStatus::ExitCode(1));
 }
-
-#[test]
-fn test_open_socket() {
-    let program = r#"
-       #include <stdlib.h>
-       int main() { system("nc 1.1.1.1 80"); return 0; }
-    "#;
-
-    let mut config = SandboxConfigurationBuilder::default();
-    config.mount_tmpfs(true);
-
-    let result = exec(program, &mut config, "");
-
-    assert_eq!(result.result.status, ExitStatus::ExitCode(0));
-    assert!(result.stderr.len() > 10); // There is an error
-}
