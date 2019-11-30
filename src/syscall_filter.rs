@@ -56,13 +56,13 @@ impl SyscallFilter {
     }
 
     /// Set the default filter action
-    pub fn default_action(&mut self, action: SyscallFilterAction) -> &Self {
+    pub fn default_action(&mut self, action: SyscallFilterAction) -> &mut Self {
         self.default_action = action;
         self
     }
 
     /// Add a rule to the filter
-    pub fn add_rule<S: Into<String>>(&mut self, syscall: S, action: SyscallFilterAction) -> &Self {
+    pub fn add_rule<S: Into<String>>(&mut self, syscall: S, action: SyscallFilterAction) -> &mut Self {
         self.rules.push((syscall.into(), action));
         self
     }

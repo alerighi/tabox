@@ -14,12 +14,47 @@ fn test_seccomp_filter() {
        int main() { getuid(); return 0; }
     "#;
 
+    let mut filter = SyscallFilter::default();
+    filter.
+        default_action(SyscallFilterAction::Allow)
+        .add_rule("getuid", SyscallFilterAction::Kill);
+
     let mut config = SandboxConfigurationBuilder::default();
-    config.memory_limit(256);
-    config.syscall_filter(SyscallFilter {
-        default_action: SyscallFilterAction::Allow,
-        rules: vec![("getuid".to_string(), SyscallFilterAction::Kill)],
-    });
+    config
+        .memory_limit(256)
+        .syscall_filter(filter);
+
+    let result = exec(program, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::Signal(31));
+}
+
+#[test]
+fn test_fork_block() {
+    let program = r#"
+       #include <unistd.h>
+       int main() { fork(); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+
+    config.syscall_filter(SyscallFilter::build(false, false));
+
+    let result = exec(program, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::Signal(31));
+}
+
+#[test]
+fn test_chmod_block() {
+    let program = r#"
+       #include <fcntl.h>
+       int main() { chmod("file", 777); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+
+    config.syscall_filter(SyscallFilter::build(false, false));
 
     let result = exec(program, &mut config, "");
 
