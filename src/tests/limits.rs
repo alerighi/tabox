@@ -65,8 +65,45 @@ fn test_time_usage() {
     let result = exec(program, &mut config, "");
 
     assert_eq!(result.result.status, ExitStatus::ExitCode(0));
+    assert!(result.result.resource_usage.user_cpu_time >= 1.9);
+    assert!(result.result.resource_usage.user_cpu_time <= 3.1);
+}
+
+#[test]
+fn test_wall_time_usage() {
+    let program = r#"
+       #include <unistd.h>
+       int main() { sleep(2); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+    config.time_limit(1).wall_time_limit(4);
+
+    let result = exec(program, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::ExitCode(0));
     assert!(
-        result.result.resource_usage.user_cpu_time > 2.0
-            && result.result.resource_usage.user_cpu_time < 3.0
+        result.result.resource_usage.wall_time_usage > 2.0
+            && result.result.resource_usage.wall_time_usage < 2.1
     )
+}
+
+#[test]
+fn test_wall_time_exeeded() {
+    let program = r#"
+       #include <unistd.h>
+       int main() { sleep(10); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+    config.time_limit(1).wall_time_limit(1);
+
+    let result = exec(program, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::Killed);
+    assert!(
+        result.result.resource_usage.wall_time_usage > 1.0
+            && result.result.resource_usage.wall_time_usage < 1.1
+    )
+
 }

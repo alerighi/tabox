@@ -16,6 +16,7 @@ use std::ffi::CString;
 use std::fs::File;
 use std::os::unix::io::IntoRawFd;
 use std::ptr::null;
+use std::thread;
 use tempdir::TempDir;
 
 macro_rules! check_syscall {
@@ -38,44 +39,30 @@ mod seccomp_filter;
 
 use seccomp_filter::*;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 pub struct LinuxSandbox {
-    tempdir: TempDir,
-    child_pid: pid_t,
+    child_thread: JoinHandle<SandboxExecutionResult>,
 }
 
 impl Sandbox for LinuxSandbox {
     fn run(config: SandboxConfiguration) -> Result<Self> {
         trace!("Run LinuxSandbox with config {:?}", config);
 
-        let tempdir = TempDir::new("tabox")?;
-
         // Start a child process to setup the sandbox
-        match unsafe { fork() } {
-            0 => unsafe { watcher(config, tempdir.path().into()) },
-            child_pid if child_pid > 0 => Ok(LinuxSandbox { tempdir, child_pid }),
-            _ => Err("Error forking process".into()),
-        }
+        let handle = thread::spawn(move || unsafe { watcher(config) });
+
+        Ok(LinuxSandbox {
+            child_thread: handle,
+        })
     }
 
     fn wait(self) -> Result<SandboxExecutionResult> {
-        trace!(
-            "Sandbox (dir = {:?}) waiting for child (PID = {}) completion",
-            self.tempdir,
-            self.child_pid
-        );
-
-        // Wait watcher to terminate
-        let mut status = -1;
-
-        if unsafe { waitpid(self.child_pid, &mut status, 0) } < 0 || status != 0 {
-            return Err("Child process error".into());
-        }
-
-        let result = fs::read_to_string(self.tempdir.path().join("result.json"))?;
-        let result = serde_json::from_str(&result)?;
-        Ok(result)
+        Ok(self.child_thread.join().unwrap())
     }
 
     fn is_secure() -> bool {
@@ -83,7 +70,10 @@ impl Sandbox for LinuxSandbox {
     }
 }
 
-unsafe fn watcher(config: SandboxConfiguration, sandbox_path: PathBuf) -> ! {
+unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
+    let tempdir = TempDir::new("tabox").expect("Cannot create temporary directory");
+    let sandbox_path = tempdir.path();
+
     // uid/gid from outside the sandbox
     let uid = getuid();
     let gid = getgid();
@@ -95,13 +85,20 @@ unsafe fn watcher(config: SandboxConfiguration, sandbox_path: PathBuf) -> ! {
         gid
     );
 
-    // Enter unshared namespace
-    check_syscall!(unshare(
-        CLONE_NEWIPC | CLONE_NEWNET | CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUSER | CLONE_NEWUTS
-    ));
+    let start_time = time();
 
-    // Fork to become pid 1
-    let child_pid = check_syscall!(fork());
+    // Start child in an unshared environment
+    let child_pid = check_syscall!(syscall(
+        SYS_clone,
+        CLONE_NEWIPC
+            | CLONE_NEWNET
+            | CLONE_NEWNS
+            | CLONE_NEWPID
+            | CLONE_NEWUSER
+            | CLONE_NEWUTS
+            | SIGCHLD,
+        null::<c_void>(),
+    )) as pid_t;
 
     if child_pid == 0 {
         // Map current uid/gid to root/root inside the sandbox
@@ -110,7 +107,21 @@ unsafe fn watcher(config: SandboxConfiguration, sandbox_path: PathBuf) -> ! {
         std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid)).unwrap();
 
         // Start child process
-        child(&config, &sandbox_path.join("box"));
+        child(&config, sandbox_path);
+    }
+
+    let killed = Arc::new(AtomicBool::new(false));
+
+    if let Some(limit) = config.wall_time_limit {
+        let killed = killed.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::new(limit, 0));
+
+            // Kill process if it didn't terminate in wall limit
+            check_syscall!(kill(child_pid, SIGKILL));
+
+            killed.store(true, Ordering::SeqCst);
+        });
     }
 
     // Wait process to terminate and get its resource consumption
@@ -119,8 +130,12 @@ unsafe fn watcher(config: SandboxConfiguration, sandbox_path: PathBuf) -> ! {
 
     check_syscall!(wait4(child_pid, &mut status, 0, &mut rusage));
 
+    let end_time = time();
+
     let result = SandboxExecutionResult {
-        status: if WIFEXITED(status) {
+        status: if killed.load(Ordering::SeqCst) {
+            ExitStatus::Killed
+        } else if WIFEXITED(status) {
             ExitStatus::ExitCode(WEXITSTATUS(status))
         } else {
             ExitStatus::Signal(WTERMSIG(status))
@@ -131,17 +146,20 @@ unsafe fn watcher(config: SandboxConfiguration, sandbox_path: PathBuf) -> ! {
                 + rusage.ru_utime.tv_sec as f64,
             system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
                 + rusage.ru_stime.tv_sec as f64,
+            wall_time_usage: end_time - start_time,
         },
     };
 
     trace!("Child terminated, result = {:?}", result);
 
-    // Write status to file
-    let result_json = serde_json::to_string(&result).unwrap();
-    fs::write(sandbox_path.join("result.json"), result_json).unwrap();
+    result
+}
 
-    // Exit correctly
-    std::process::exit(0);
+/// Return current system clock
+unsafe fn time() -> f64 {
+    let mut t: timespec = std::mem::zeroed();
+    check_syscall!(clock_gettime(CLOCK_MONOTONIC, &mut t));
+    t.tv_sec as f64 + t.tv_nsec as f64 / 1_000_000_000.0
 }
 
 unsafe fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {

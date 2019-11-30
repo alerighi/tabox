@@ -54,6 +54,9 @@ pub struct SandboxConfiguration {
 
     /// Mount a r/w tmpfs in /tmp and /dev/shm
     pub mount_tmpfs: bool,
+
+    /// Wall time limit
+    pub wall_time_limit: Option<u64>,
 }
 
 /// Builder for the SandboxConfiguration
@@ -71,6 +74,7 @@ pub struct SandboxConfigurationBuilder {
     stderr: Option<PathBuf>,
     syscall_filter: Option<SyscallFilter>,
     mount_tmpfs: bool,
+    wall_time_limit: Option<u64>,
 }
 
 impl Default for SandboxConfigurationBuilder {
@@ -88,6 +92,7 @@ impl Default for SandboxConfigurationBuilder {
             stderr: None,
             syscall_filter: None,
             mount_tmpfs: false,
+            wall_time_limit: None,
         }
     }
 }
@@ -108,6 +113,7 @@ impl SandboxConfigurationBuilder {
             stderr: self.stderr,
             syscall_filter: self.syscall_filter,
             mount_tmpfs: self.mount_tmpfs,
+            wall_time_limit: self.wall_time_limit,
         }
     }
 
@@ -188,6 +194,12 @@ impl SandboxConfigurationBuilder {
     /// Mount a r/w tmpfs in /tmp and /dev/shm
     pub fn mount_tmpfs(&mut self, value: bool) -> &mut Self {
         self.mount_tmpfs = value;
+        self
+    }
+
+    /// Set wall time limit
+    pub fn wall_time_limit(&mut self, value: u64) -> &mut Self {
+        self.wall_time_limit = Some(value);
         self
     }
 }

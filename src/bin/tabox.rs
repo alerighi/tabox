@@ -80,6 +80,10 @@ struct Args {
     /// Mount a tmpfs in /tmp and /dev/shm
     #[structopt(long)]
     mount_tmpfs: bool,
+
+    /// Wall time limit
+    #[structopt(long)]
+    wall_limit: Option<u64>,
 }
 
 fn main() {
@@ -105,6 +109,10 @@ fn main() {
 
     if let Some(memory_limit) = args.memory_limit {
         config.memory_limit(memory_limit);
+    }
+
+    if let Some(wall_limit) = args.wall_limit {
+        config.wall_time_limit(wall_limit);
     }
 
     if let Some(stdin) = args.stdin {

@@ -15,6 +15,9 @@ pub struct ResourceUsage {
 
     /// System cpu time usage in seconds
     pub system_cpu_time: f64,
+
+    /// Wall time usage
+    pub wall_time_usage: f64,
 }
 
 /// Exit status of a sandbox process
@@ -25,6 +28,9 @@ pub enum ExitStatus {
 
     /// Process was killed with a signal
     Signal(i32),
+
+    /// Process was killed by the sandbox (e.g for exceeding wall time limit)
+    Killed,
 }
 
 impl ExitStatus {
