@@ -38,7 +38,7 @@ fn test_memory_limit_exceeded() {
 }
 
 #[test]
-fn test_time_limit() {
+fn test_time_limit_exceeded() {
     let program = r#"
        #include <stdio.h>
        int main() { while(1); }
@@ -50,4 +50,23 @@ fn test_time_limit() {
     let result = exec(program, &mut config, "");
 
     assert_eq!(result.result.status, ExitStatus::Signal(9));
+}
+
+#[test]
+fn test_time_usage() {
+    let program = r#"
+       #include <time.h>
+       int main() { for (int t = time(NULL); t + 2 >= time(NULL); ); return 0; }
+    "#;
+
+    let mut config = SandboxConfigurationBuilder::default();
+    config.time_limit(20);
+
+    let result = exec(program, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::ExitCode(0));
+    assert!(
+        result.result.resource_usage.user_cpu_time > 2.0
+            && result.result.resource_usage.user_cpu_time < 3.0
+    )
 }

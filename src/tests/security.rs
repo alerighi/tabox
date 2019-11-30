@@ -15,14 +15,12 @@ fn test_seccomp_filter() {
     "#;
 
     let mut filter = SyscallFilter::default();
-    filter.
-        default_action(SyscallFilterAction::Allow)
+    filter
+        .default_action(SyscallFilterAction::Allow)
         .add_rule("getuid", SyscallFilterAction::Kill);
 
     let mut config = SandboxConfigurationBuilder::default();
-    config
-        .memory_limit(256)
-        .syscall_filter(filter);
+    config.memory_limit(256).syscall_filter(filter);
 
     let result = exec(program, &mut config, "");
 
@@ -48,7 +46,7 @@ fn test_fork_block() {
 #[test]
 fn test_chmod_block() {
     let program = r#"
-       #include <fcntl.h>
+       #include <sys/stat.h>
        int main() { chmod("file", 777); return 0; }
     "#;
 
