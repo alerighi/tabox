@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str;
 
-use crate::configuration::{BindMount, DirectoryMount, SandboxConfigurationBuilder};
+use crate::configuration::SandboxConfigurationBuilder;
 use crate::result::SandboxExecutionResult;
 use crate::{Sandbox, SandboxImplementation};
 
@@ -50,36 +50,12 @@ pub fn exec(
     assert!(compile_output.status.success(), "Compilation error");
 
     config
-        .mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/usr"),
-            target: PathBuf::from("/usr"),
-            writable: false,
-        }))
-        .mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/lib64"),
-            target: PathBuf::from("/lib64"),
-            writable: false,
-        }))
-        .mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/lib"),
-            target: PathBuf::from("/lib"),
-            writable: false,
-        }))
-        .mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/bin"),
-            target: PathBuf::from("/bin"),
-            writable: false,
-        }))
-        .mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from("/etc"),
-            target: PathBuf::from("/etc"),
-            writable: false,
-        }))
-        .mount(DirectoryMount::Bind(BindMount {
-            source: temp.path().to_owned(),
-            target: temp.path().to_owned(),
-            writable: true,
-        }))
+        .mount(PathBuf::from("/usr"), PathBuf::from("/usr"), false)
+        .mount(PathBuf::from("/lib64"), PathBuf::from("/lib64"), false)
+        .mount(PathBuf::from("/lib"), PathBuf::from("/lib"), false)
+        .mount(PathBuf::from("/bin"), PathBuf::from("/bin"), false)
+        .mount(PathBuf::from("/etc"), PathBuf::from("/etc"), false)
+        .mount(temp.path().to_owned(), temp.path().to_owned(), true)
         .mount_tmpfs(true)
         .working_directory(PathBuf::from(temp.path()))
         .executable(executable_path)

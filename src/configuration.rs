@@ -2,9 +2,9 @@ use crate::syscall_filter::SyscallFilter;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-/// A structure that describes how a bind mount into the Sandbox
+/// Describes a mountpoint inside the sandbox
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BindMount {
+pub struct DirectoryMount {
     /// Where to mount the directory inside the sandbox.
     pub target: PathBuf,
 
@@ -13,16 +13,6 @@ pub struct BindMount {
 
     /// Should the directory be writable or not
     pub writable: bool,
-}
-
-/// Describes a mountpoint inside the sandbox
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DirectoryMount {
-    /// Bind a directory of the system inside the sandbox
-    Bind(BindMount),
-
-    /// Mount a tmpfs in the specified path
-    Tmpfs(PathBuf),
 }
 
 /// struct that represents the configuration parameters
@@ -176,8 +166,16 @@ impl SandboxConfigurationBuilder {
     }
 
     /// Add a mount point into the sandbox
-    pub fn mount(&mut self, mount: DirectoryMount) -> &mut Self {
-        self.mount_paths.push(mount);
+    pub fn mount<P, Q>(&mut self, source: P, target: Q, writable: bool) -> &mut Self
+    where
+        P: Into<PathBuf>,
+        Q: Into<PathBuf>,
+    {
+        self.mount_paths.push(DirectoryMount {
+            source: source.into(),
+            target: target.into(),
+            writable,
+        });
         self
     }
 

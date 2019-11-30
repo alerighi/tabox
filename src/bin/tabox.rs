@@ -11,7 +11,7 @@ extern crate log;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tabox::configuration::{BindMount, DirectoryMount, SandboxConfigurationBuilder};
+use tabox::configuration::SandboxConfigurationBuilder;
 use tabox::syscall_filter::SyscallFilter;
 use tabox::{Sandbox, SandboxImplementation};
 
@@ -152,11 +152,7 @@ fn main() {
         } else {
             false
         };
-        config.mount(DirectoryMount::Bind(BindMount {
-            source: PathBuf::from(parts[0]),
-            target: PathBuf::from(parts[0]),
-            writable,
-        }));
+        config.mount(PathBuf::from(parts[0]), PathBuf::from(parts[0]), writable);
     }
 
     config.syscall_filter(SyscallFilter::build(

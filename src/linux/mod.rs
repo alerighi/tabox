@@ -293,39 +293,21 @@ unsafe fn make_dev(path: &Path, major: u32, minor: u32) {
 /// Mount a directory inside the sandbox
 unsafe fn mount_dir(dir: &DirectoryMount, sandbox_dir: &Path) {
     trace!("Mount {:?}", dir);
+    assert_ne!(dir.target, Path::new("/"));
 
-    let prepare_dir = |dir: &Path| {
-        // Join destination with the sandbox directory
-        let target = sandbox_dir.join(dir.strip_prefix("/").unwrap());
+    // Join destination with the sandbox directory
+    let target = sandbox_dir.join(dir.target.strip_prefix("/").unwrap());
 
-        // Create all the required directories in the destination
-        std::fs::create_dir_all(&target).unwrap();
+    mount(
+        dir.source.to_str().unwrap(),
+        &target,
+        "",
+        MS_BIND | MS_REC,
+        "",
+    );
 
-        // Convert to C string
-        target
-    };
-
-    match dir {
-        DirectoryMount::Bind(bind) => {
-            assert_ne!(bind.target, Path::new("/"));
-
-            let target = prepare_dir(&bind.target);
-
-            mount(
-                bind.source.to_str().unwrap(),
-                &target,
-                "",
-                MS_BIND | MS_REC,
-                "",
-            );
-
-            if !bind.writable {
-                mount("", &target, "", MS_REMOUNT | MS_RDONLY | MS_BIND, "");
-            }
-        }
-        DirectoryMount::Tmpfs(path) => {
-            mount("tmpfs", &prepare_dir(path), "tmpfs", 0, "");
-        }
+    if !dir.writable {
+        mount("", &target, "", MS_REMOUNT | MS_RDONLY | MS_BIND, "");
     }
 }
 
