@@ -105,5 +105,4 @@ fn test_wall_time_exeeded() {
         result.result.resource_usage.wall_time_usage > 1.0
             && result.result.resource_usage.wall_time_usage < 1.1
     )
-
 }

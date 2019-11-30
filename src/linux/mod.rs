@@ -112,6 +112,7 @@ unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
 
     let killed = Arc::new(AtomicBool::new(false));
 
+    // Start a thread that kills the process when the wall limit expires
     if let Some(limit) = config.wall_time_limit {
         let killed = killed.clone();
         thread::spawn(move || {
@@ -162,6 +163,7 @@ unsafe fn time() -> f64 {
     t.tv_sec as f64 + t.tv_nsec as f64 / 1_000_000_000.0
 }
 
+/// Child process
 unsafe fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
     assert_eq!(getpid(), 1);
     assert_eq!(getuid(), 0);
