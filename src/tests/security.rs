@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::util::*;
-use crate::configuration::SandboxConfigurationBuilder;
+use crate::configuration::SandboxConfiguration;
 use crate::result::ExitStatus;
 use crate::syscall_filter::{SyscallFilter, SyscallFilterAction};
 
@@ -20,7 +20,7 @@ fn test_seccomp_filter() {
         .default_action(SyscallFilterAction::Allow)
         .add_rule("getuid", SyscallFilterAction::Kill);
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.memory_limit(256).syscall_filter(filter);
 
     let result = exec(program, &mut config, "");
@@ -35,7 +35,7 @@ fn test_fork_block() {
        int main() { fork(); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
 
     config.syscall_filter(SyscallFilter::build(false, false));
 
@@ -51,7 +51,7 @@ fn test_chmod_block() {
        int main() { chmod("file", 777); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
 
     config.syscall_filter(SyscallFilter::build(false, false));
 
@@ -67,7 +67,7 @@ fn test_no_write_root() {
        int main() { return fopen("/file", "w") == 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
 
     let result = exec(program, &mut config, "");
 
@@ -81,7 +81,7 @@ fn test_write_tmp() {
        int main() { return fopen("/tmp/file", "w") != 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.mount_tmpfs(true);
 
     let result = exec(program, &mut config, "");

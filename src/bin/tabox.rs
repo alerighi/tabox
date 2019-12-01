@@ -12,7 +12,7 @@ extern crate log;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use structopt::StructOpt;
-use tabox::configuration::SandboxConfigurationBuilder;
+use tabox::configuration::SandboxConfiguration;
 use tabox::syscall_filter::SyscallFilter;
 use tabox::{Sandbox, SandboxImplementation};
 
@@ -85,6 +85,10 @@ struct Args {
     /// Wall time limit
     #[structopt(long)]
     wall_limit: Option<u64>,
+
+    /// Run on the specified cpu core
+    #[structopt(long)]
+    cpu_core: Option<u8>,
 }
 
 fn main() {
@@ -98,7 +102,7 @@ fn main() {
         return;
     }
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
 
     config
         .executable(args.executable)
@@ -130,6 +134,10 @@ fn main() {
 
     if let Some(working_directory) = args.working_directory {
         config.working_directory(working_directory);
+    }
+
+    if let Some(core) = args.cpu_core {
+        config.run_on_core(core);
     }
 
     for arg in args.args {

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::str;
 
-use crate::configuration::SandboxConfigurationBuilder;
+use crate::configuration::SandboxConfiguration;
 use crate::result::SandboxExecutionResult;
 use crate::{Sandbox, SandboxImplementation};
 
@@ -19,11 +19,7 @@ pub struct ExecutionResult {
     pub stderr: String,
 }
 
-pub fn exec(
-    program: &str,
-    config: &mut SandboxConfigurationBuilder,
-    stdin: &str,
-) -> ExecutionResult {
+pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> ExecutionResult {
     let temp = tempdir::TempDir::new("temp").unwrap();
 
     let source_path = temp.path().join("program.c");

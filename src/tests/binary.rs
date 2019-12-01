@@ -1,7 +1,7 @@
-use std::process::{Command, Output};
-use std::path::Path;
-use crate::tests::util::ExecutionResult;
 use crate::result::ExitStatus;
+use crate::tests::util::ExecutionResult;
+use std::path::Path;
+use std::process::{Command, Output};
 
 /// Execute compiled program
 fn run_program(args: Vec<&str>) -> Output {

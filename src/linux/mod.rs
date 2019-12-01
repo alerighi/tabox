@@ -3,6 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
+extern crate core_affinity;
 extern crate errno;
 extern crate libc;
 extern crate seccomp_sys;
@@ -107,6 +108,9 @@ unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
         std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid)).unwrap();
         std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid)).unwrap();
 
+        // When parent dies, I want to die too
+        check_syscall!(prctl(PR_SET_PDEATHSIG, SIGKILL));
+
         // Start child process
         child(&config, sandbox_path);
     }
@@ -174,8 +178,19 @@ unsafe fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
     setup_resource_limits(config);
     setup_syscall_filter(config);
     setup_io_redirection(config);
+    setup_thread_affinity(config);
     enter_chroot(config, sandbox_path);
     exec_child(config);
+}
+
+/// Set cpu affinity
+unsafe fn setup_thread_affinity(config: &SandboxConfiguration) {
+    if let Some(core) = config.cpu_core {
+        let mut cpu: cpu_set_t = std::mem::zeroed();
+        CPU_ZERO(&mut cpu);
+        CPU_SET(core as usize, &mut cpu);
+        check_syscall!(sched_setaffinity(1, 1, &cpu));
+    }
 }
 
 /// Enter the sandbox chroot and change directory

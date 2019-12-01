@@ -62,29 +62,14 @@ pub struct SandboxConfiguration {
 
     /// Wall time limit
     pub wall_time_limit: Option<u64>,
+
+    /// Set on which CPU core to run the sandbox
+    pub cpu_core: Option<u8>,
 }
 
-/// Builder for the SandboxConfiguration
-#[derive(Debug, Clone)]
-pub struct SandboxConfigurationBuilder {
-    time_limit: Option<u64>,
-    memory_limit: Option<u64>,
-    executable: PathBuf,
-    args: Vec<String>,
-    env: Vec<(String, String)>,
-    mount_paths: Vec<DirectoryMount>,
-    working_directory: PathBuf,
-    stdin: Option<PathBuf>,
-    stdout: Option<PathBuf>,
-    stderr: Option<PathBuf>,
-    syscall_filter: Option<SyscallFilter>,
-    mount_tmpfs: bool,
-    wall_time_limit: Option<u64>,
-}
-
-impl Default for SandboxConfigurationBuilder {
+impl Default for SandboxConfiguration {
     fn default() -> Self {
-        SandboxConfigurationBuilder {
+        SandboxConfiguration {
             time_limit: None,
             memory_limit: None,
             executable: PathBuf::from("/bin/sh"),
@@ -98,28 +83,15 @@ impl Default for SandboxConfigurationBuilder {
             syscall_filter: None,
             mount_tmpfs: false,
             wall_time_limit: None,
+            cpu_core: None,
         }
     }
 }
 
-impl SandboxConfigurationBuilder {
+impl SandboxConfiguration {
     /// Build the sandbox configuration
-    pub fn build(self) -> SandboxConfiguration {
-        SandboxConfiguration {
-            time_limit: self.time_limit,
-            memory_limit: self.memory_limit,
-            executable: self.executable,
-            args: self.args,
-            env: self.env,
-            mount_paths: self.mount_paths,
-            working_directory: self.working_directory,
-            stdin: self.stdin,
-            stdout: self.stdout,
-            stderr: self.stderr,
-            syscall_filter: self.syscall_filter,
-            mount_tmpfs: self.mount_tmpfs,
-            wall_time_limit: self.wall_time_limit,
-        }
+    pub fn build(&self) -> SandboxConfiguration {
+        self.clone()
     }
 
     /// Set the time limit
@@ -205,6 +177,12 @@ impl SandboxConfigurationBuilder {
     /// Set wall time limit
     pub fn wall_time_limit(&mut self, value: u64) -> &mut Self {
         self.wall_time_limit = Some(value);
+        self
+    }
+
+    /// Run the sandbox on the specified cpu core
+    pub fn run_on_core(&mut self, value: u8) -> &mut Self {
+        self.cpu_core = Some(value);
         self
     }
 }

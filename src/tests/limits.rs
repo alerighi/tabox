@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::util::*;
-use crate::configuration::SandboxConfigurationBuilder;
+use crate::configuration::SandboxConfiguration;
 use crate::result::ExitStatus;
 
 #[test]
@@ -14,7 +14,7 @@ fn test_memory_limit_ok() {
        int main() { int s = 200 * 1000000; char *m = malloc(s); for (int i = 0; i < s; i++) m[i] = i; return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.memory_limit(256);
 
     let result = exec(program, &mut config, "");
@@ -30,7 +30,7 @@ fn test_memory_limit_exceeded() {
        int main() { int s = 256 * 1000000; char *m = malloc(s); for (int i = 0; i < s; i++) m[i] = i; return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.memory_limit(256);
 
     let result = exec(program, &mut config, "");
@@ -45,7 +45,7 @@ fn test_time_limit_exceeded() {
        int main() { while(1); }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.time_limit(1);
 
     let result = exec(program, &mut config, "");
@@ -60,7 +60,7 @@ fn test_time_usage() {
        int main() { for (int t = time(NULL); t + 2 >= time(NULL); ); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.time_limit(20);
 
     let result = exec(program, &mut config, "");
@@ -77,7 +77,7 @@ fn test_wall_time_usage() {
        int main() { sleep(2); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.time_limit(1).wall_time_limit(4);
 
     let result = exec(program, &mut config, "");
@@ -96,7 +96,7 @@ fn test_wall_time_exeeded() {
        int main() { sleep(10); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.time_limit(1).wall_time_limit(1);
 
     let result = exec(program, &mut config, "");

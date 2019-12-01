@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::util::*;
-use crate::configuration::SandboxConfigurationBuilder;
+use crate::configuration::SandboxConfiguration;
 use crate::result::ExitStatus;
 
 #[test]
@@ -14,7 +14,7 @@ fn test_ok_program() {
        int main() { printf("hello, world!"); fprintf(stderr, "error"); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.time_limit(1);
     config.memory_limit(256);
 
@@ -32,7 +32,7 @@ fn test_signal_program() {
        int main() { int *ptr = NULL; *ptr = 42; return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
 
     let result = exec(program, &mut config, "");
 
@@ -47,7 +47,7 @@ fn test_env() {
         int main() { printf("%s", getenv("VAR")); return 0; }
     "#;
 
-    let mut config = SandboxConfigurationBuilder::default();
+    let mut config = SandboxConfiguration::default();
     config.env("VAR", "42");
     let result = exec(program, &mut config, "");
     assert_eq!(result.result.status, ExitStatus::ExitCode(0));
