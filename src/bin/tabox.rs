@@ -179,8 +179,8 @@ fn main() {
     let result = sandbox.wait().expect("Error waiting for sandbox result");
 
     if args.json {
-        println!("{}", serde_json::to_string(&result).unwrap());
+        eprintln!("{}", serde_json::to_string(&result).unwrap());
     } else {
-        println!("{:#?}", result);
+        eprintln!("{:#?}", result);
     }
 }

@@ -17,6 +17,7 @@ default-run = "tabox"
 
 [[bin]]
 name = "tabox"
+path = "src/bin/tabox.rs"
 required-features = ["binary"]
 
 [features]

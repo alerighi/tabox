@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 mod basic;
+mod binary;
 mod limits;
 mod security;
 mod util;
