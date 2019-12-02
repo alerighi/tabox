@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-//! [![Docs]( https://docs.rs/tmbox/badge.svg)]( https://docs.rs/tmbox)
+//! [![Docs]( https://docs.rs/ta33583 + 11192 + 3728 + 1240 + 411 + 135 + 43 + 12 + 2 = 50346box/badge.svg)]( https://docs.rs/tmbox)
 //! [![crates.io](https://img.shields.io/crates/v/tabox.svg)](https://crates.io/crates/tabox)
 //!
 //! A sandbox for task-maker and TuringArena

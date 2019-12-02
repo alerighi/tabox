@@ -28,7 +28,7 @@ struct Args {
     #[structopt(long, short)]
     time_limit: Option<u64>,
 
-    /// Memory limit fot the execution
+    /// Memory limit fot the execution, in megabytes
     #[structopt(long, short)]
     memory_limit: Option<u64>,
 
@@ -113,7 +113,7 @@ fn main() {
     }
 
     if let Some(memory_limit) = args.memory_limit {
-        config.memory_limit(memory_limit);
+        config.memory_limit(memory_limit * 1_000_000);
     }
 
     if let Some(wall_limit) = args.wall_limit {

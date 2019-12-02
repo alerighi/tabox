@@ -15,7 +15,7 @@ fn test_memory_limit_ok() {
     "#;
 
     let mut config = SandboxConfiguration::default();
-    config.memory_limit(256);
+    config.memory_limit(256 * 1_000_000);
 
     let result = exec(program, &mut config, "");
 
@@ -31,7 +31,7 @@ fn test_memory_limit_exceeded() {
     "#;
 
     let mut config = SandboxConfiguration::default();
-    config.memory_limit(256);
+    config.memory_limit(256 * 1_000_000);
 
     let result = exec(program, &mut config, "");
 

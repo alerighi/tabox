@@ -16,7 +16,7 @@ fn test_ok_program() {
 
     let mut config = SandboxConfiguration::default();
     config.time_limit(1);
-    config.memory_limit(256);
+    config.memory_limit(256 * 1_000_000);
 
     let result = exec(program, &mut config, "");
 

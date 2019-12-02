@@ -21,7 +21,7 @@ fn test_seccomp_filter() {
         .add_rule("getuid", SyscallFilterAction::Kill);
 
     let mut config = SandboxConfiguration::default();
-    config.memory_limit(256).syscall_filter(filter);
+    config.syscall_filter(filter);
 
     let result = exec(program, &mut config, "");
 

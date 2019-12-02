@@ -100,7 +100,7 @@ impl SandboxConfiguration {
         self
     }
 
-    /// Set the memory limit
+    /// Set the memory limit, in **bytes**
     pub fn memory_limit(&mut self, memory_limit: u64) -> &mut Self {
         self.memory_limit = Some(memory_limit);
         self

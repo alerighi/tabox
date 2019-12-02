@@ -306,12 +306,15 @@ unsafe fn setup_io_redirection(config: &SandboxConfiguration) {
 /// Setup the resource limits
 unsafe fn setup_resource_limits(config: &SandboxConfiguration) {
     if let Some(memory_limit) = config.memory_limit {
-        check_syscall!(set_resource_limit(RLIMIT_AS, memory_limit * 1_000_000));
+        check_syscall!(set_resource_limit(RLIMIT_AS, memory_limit));
     }
 
     if let Some(time_limit) = config.time_limit {
         check_syscall!(set_resource_limit(RLIMIT_CPU, time_limit));
     }
+
+    // No core dumps
+    check_syscall!(set_resource_limit(RLIMIT_CORE, 0));
 }
 
 /// Create a device
