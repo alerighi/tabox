@@ -145,15 +145,14 @@ fn main() {
     }
 
     for el in args.env {
-        let parts: Vec<&str> = el.split("=").collect();
+        let parts: Vec<&str> = el.split('=').collect();
         match parts.len() {
             1 => {
                 config.env(
                     parts[0],
-                    std::env::var(parts[0]).expect(&format!(
-                        "Variable {} not present in the environment",
-                        parts[0]
-                    )),
+                    std::env::var(parts[0]).unwrap_or_else(|_| {
+                        panic!("Variable {} not present in the environment", parts[0])
+                    }),
                 );
             }
             2 => {
@@ -164,7 +163,7 @@ fn main() {
     }
 
     for path in args.mount {
-        let parts: Vec<&str> = path.split(",").collect();
+        let parts: Vec<&str> = path.split(',').collect();
         if parts.len() > 2 {
             panic!("Invalid path parameter");
         }

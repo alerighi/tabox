@@ -9,18 +9,6 @@ extern crate libc;
 extern crate seccomp_sys;
 extern crate tempdir;
 
-use crate::configuration::{DirectoryMount, SandboxConfiguration};
-use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::{Result, Sandbox};
-
-use libc::*;
-use std::ffi::CString;
-use std::fs::File;
-use std::os::unix::io::IntoRawFd;
-use std::ptr::null;
-use std::thread;
-use tempdir::TempDir;
-
 macro_rules! check_syscall {
     ($call:expr) => {{
         let result = $call;
@@ -39,13 +27,24 @@ macro_rules! check_syscall {
 
 mod seccomp_filter;
 
+use crate::configuration::{DirectoryMount, SandboxConfiguration};
+use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
+use crate::{Result, Sandbox};
+
+use libc::*;
 use seccomp_filter::*;
+use std::ffi::CString;
 use std::fs;
+use std::fs::File;
+use std::os::unix::io::IntoRawFd;
 use std::path::Path;
+use std::ptr::null;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
+use tempdir::TempDir;
 
 pub struct LinuxSandbox {
     child_thread: JoinHandle<SandboxExecutionResult>,
@@ -55,8 +54,10 @@ impl Sandbox for LinuxSandbox {
     fn run(config: SandboxConfiguration) -> Result<Self> {
         trace!("Run LinuxSandbox with config {:?}", config);
 
-        // Start a child process to setup the sandbox
-        let handle = thread::spawn(move || unsafe { watcher(config) });
+        // Start a child process to setup the sandboxhttps://www.reddit.com/r/AskReddit/
+        let handle = thread::Builder::new()
+            .name("Sandbox watcher".into())
+            .spawn(move || unsafe { watcher(config) })?;
 
         Ok(LinuxSandbox {
             child_thread: handle,
@@ -120,14 +121,17 @@ unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
     // Start a thread that kills the process when the wall limit expires
     if let Some(limit) = config.wall_time_limit {
         let killed = killed.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::new(limit, 0));
+        thread::Builder::new()
+            .name("Wall time watcher".into())
+            .spawn(move || {
+                thread::sleep(Duration::new(limit, 0));
 
-            // Kill process if it didn't terminate in wall limit
-            check_syscall!(kill(child_pid, SIGKILL));
+                // Kill process if it didn't terminate in wall limit
+                check_syscall!(kill(child_pid, SIGKILL));
 
-            killed.store(true, Ordering::SeqCst);
-        });
+                killed.store(true, Ordering::SeqCst);
+            })
+            .expect("Error spawning wall time watcher thread");
     }
 
     // Wait process to terminate and get its resource consumption
