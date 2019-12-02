@@ -210,29 +210,36 @@ unsafe fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
 
 unsafe fn exec_child(config: &SandboxConfiguration) -> ! {
     assert!(config.executable.exists(), "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
-    let exe = CString::new(config.executable.to_str().unwrap()).unwrap();
 
     // Build args array
-    let args: Vec<CString> = config
-        .args
-        .iter()
-        .map(|s| CString::new(s.as_str()).unwrap())
-        .collect();
-    let mut argv: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
-    argv.insert(0, exe.as_ptr()); // set executable name
-    argv.push(null()); // null terminate
+    let mut args: Vec<CString> = Vec::new();
+    args.push(CString::new(config.executable.to_str().unwrap()).unwrap());
+    for arg in &config.args {
+        args.push(CString::new(arg.clone()).unwrap());
+    }
 
     // Build environment array
     let mut env: Vec<CString> = Vec::new();
     for (variable, value) in &config.env {
         env.push(CString::new(format!("{}={}", variable, value)).unwrap());
     }
-    let mut envp: Vec<*const c_char> = env.iter().map(|s| s.as_ptr()).collect();
-    envp.push(null()); // null terminate
 
-    check_syscall!(execve(exe.as_ptr(), argv.as_ptr(), envp.as_ptr()));
-
+    check_syscall!(execve(
+        args[0].as_ptr(),
+        to_c_array(&args).as_ptr(),
+        to_c_array(&env).as_ptr()
+    ));
     unreachable!();
+}
+
+/// Convert CString array to null-terminated C array
+fn to_c_array(a: &[CString]) -> Vec<*const c_char> {
+    let mut result: Vec<*const c_char> = Vec::new();
+    for s in a {
+        result.push(s.as_ptr());
+    }
+    result.push(null());
+    result
 }
 
 /// Setup the Syscall filter
