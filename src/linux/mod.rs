@@ -9,32 +9,17 @@ extern crate libc;
 extern crate seccomp_sys;
 extern crate tempdir;
 
-macro_rules! check_syscall {
-    ($call:expr) => {{
-        let result = $call;
-        trace!("{} = {}", stringify!($call), result);
-        if result < 0 {
-            panic!(
-                "{} failed with exit code {} ({})",
-                stringify!($call),
-                result,
-                errno::errno()
-            );
-        }
-        result
-    }};
-}
-
+mod filesystem;
 mod seccomp_filter;
 
-use crate::configuration::{DirectoryMount, SandboxConfiguration};
+use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
+use crate::util::{set_resource_limit, time};
 use crate::{Result, Sandbox};
 
 use libc::*;
 use seccomp_filter::*;
 use std::ffi::CString;
-use std::fs;
 use std::fs::File;
 use std::os::unix::io::IntoRawFd;
 use std::path::Path;
@@ -57,7 +42,7 @@ impl Sandbox for LinuxSandbox {
         // Start a child process to setup the sandboxhttps://www.reddit.com/r/AskReddit/
         let handle = thread::Builder::new()
             .name("Sandbox watcher".into())
-            .spawn(move || unsafe { watcher(config) })?;
+            .spawn(move || watcher(config))?;
 
         Ok(LinuxSandbox {
             child_thread: handle,
@@ -73,17 +58,17 @@ impl Sandbox for LinuxSandbox {
     }
 }
 
-unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
+fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
     let tempdir = TempDir::new("tabox").expect("Cannot create temporary directory");
     let sandbox_path = tempdir.path();
 
     // uid/gid from outside the sandbox
-    let uid = getuid();
-    let gid = getgid();
+    let uid = unsafe { getuid() };
+    let gid = unsafe { getgid() };
 
     trace!(
         "Watcher process started, PID = {}, uid = {}, gid = {}",
-        getpid(),
+        unsafe { getpid() },
         uid,
         gid
     );
@@ -136,19 +121,21 @@ unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
 
     // Wait process to terminate and get its resource consumption
     let mut status = 0;
-    let mut rusage: rusage = std::mem::zeroed();
+    let mut rusage: rusage = unsafe { std::mem::zeroed() };
 
     check_syscall!(wait4(child_pid, &mut status, 0, &mut rusage));
 
     let end_time = time();
 
     let result = SandboxExecutionResult {
-        status: if killed.load(Ordering::SeqCst) {
-            ExitStatus::Killed
-        } else if WIFEXITED(status) {
-            ExitStatus::ExitCode(WEXITSTATUS(status))
-        } else {
-            ExitStatus::Signal(WTERMSIG(status))
+        status: unsafe {
+            if killed.load(Ordering::SeqCst) {
+                ExitStatus::Killed
+            } else if WIFEXITED(status) {
+                ExitStatus::ExitCode(WEXITSTATUS(status))
+            } else {
+                ExitStatus::Signal(WTERMSIG(status))
+            }
         },
         resource_usage: ResourceUsage {
             memory_usage: rusage.ru_maxrss as usize * 1024,
@@ -165,20 +152,13 @@ unsafe fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
     result
 }
 
-/// Return current system clock
-unsafe fn time() -> f64 {
-    let mut t: timespec = std::mem::zeroed();
-    check_syscall!(clock_gettime(CLOCK_MONOTONIC, &mut t));
-    t.tv_sec as f64 + t.tv_nsec as f64 / 1_000_000_000.0
-}
-
 /// Child process
-unsafe fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
-    assert_eq!(getpid(), 1);
-    assert_eq!(getuid(), 0);
-    assert_eq!(getgid(), 0);
+fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
+    assert_eq!(unsafe { getpid() }, 1);
+    assert_eq!(unsafe { getuid() }, 0);
+    assert_eq!(unsafe { getgid() }, 0);
 
-    setup_filesystem(config, sandbox_path);
+    filesystem::create(config, sandbox_path);
     setup_resource_limits(config);
     setup_syscall_filter(config);
     setup_io_redirection(config);
@@ -188,17 +168,19 @@ unsafe fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
 }
 
 /// Set cpu affinity
-unsafe fn setup_thread_affinity(config: &SandboxConfiguration) {
+fn setup_thread_affinity(config: &SandboxConfiguration) {
     if let Some(core) = config.cpu_core {
-        let mut cpu: cpu_set_t = std::mem::zeroed();
-        CPU_ZERO(&mut cpu);
-        CPU_SET(core as usize, &mut cpu);
-        check_syscall!(sched_setaffinity(1, 1, &cpu));
+        unsafe {
+            let mut cpu: cpu_set_t = std::mem::zeroed();
+            CPU_ZERO(&mut cpu);
+            CPU_SET(core as usize, &mut cpu);
+            check_syscall!(sched_setaffinity(1, 1, &cpu));
+        }
     }
 }
 
 /// Enter the sandbox chroot and change directory
-unsafe fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
+fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
     // Chroot into the sandbox
     let root = CString::new(sandbox_path.to_str().unwrap()).unwrap();
     check_syscall!(chroot(root.as_ptr()));
@@ -208,7 +190,7 @@ unsafe fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
     check_syscall!(chdir(cwd.as_ptr()));
 }
 
-unsafe fn exec_child(config: &SandboxConfiguration) -> ! {
+fn exec_child(config: &SandboxConfiguration) -> ! {
     assert!(config.executable.exists(), "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
 
     // Build args array
@@ -243,7 +225,7 @@ fn to_c_array(a: &[CString]) -> Vec<*const c_char> {
 }
 
 /// Setup the Syscall filter
-unsafe fn setup_syscall_filter(config: &SandboxConfiguration) {
+fn setup_syscall_filter(config: &SandboxConfiguration) {
     if let Some(syscall_filter) = &config.syscall_filter {
         let mut filter = SeccompFilter::new(syscall_filter.default_action);
         for (syscall, action) in &syscall_filter.rules {
@@ -253,43 +235,8 @@ unsafe fn setup_syscall_filter(config: &SandboxConfiguration) {
     }
 }
 
-/// Setup the sandbox filesystem
-unsafe fn setup_filesystem(config: &SandboxConfiguration, sandbox_path: &Path) {
-    // Create the sandbox dir and mount a tmpfs in it
-    mount("tmpfs", &sandbox_path, "tmpfs", 0, "size=256M");
-
-    // Create /dev
-    let dev = sandbox_path.join("dev");
-    fs::create_dir_all(&dev).unwrap();
-
-    make_dev(&dev.join("null"), 1, 3);
-    make_dev(&dev.join("zero"), 1, 5);
-    make_dev(&dev.join("random"), 1, 8);
-    make_dev(&dev.join("urandom"), 1, 9);
-
-    // Mount /tmp and /dev/shm
-    if config.mount_tmpfs {
-        mount("tmpfs", &sandbox_path.join("tmp"), "tmpfs", 0, "size=256M");
-        mount(
-            "tmpfs",
-            &sandbox_path.join("dev/shm"),
-            "tmpfs",
-            0,
-            "size=256M",
-        );
-    }
-
-    // bind mount the readable directories into the sandbox
-    for dir in &config.mount_paths {
-        mount_dir(dir, sandbox_path);
-    }
-
-    // Remount tmpfs read only
-    mount("tmpfs", &sandbox_path, "tmpfs", MS_REMOUNT | MS_RDONLY, "");
-}
-
 /// Setup stdio file redirection
-unsafe fn setup_io_redirection(config: &SandboxConfiguration) {
+fn setup_io_redirection(config: &SandboxConfiguration) {
     // Setup io redirection
     if let Some(stdin) = &config.stdin {
         let file = File::open(&stdin)
@@ -311,88 +258,15 @@ unsafe fn setup_io_redirection(config: &SandboxConfiguration) {
 }
 
 /// Setup the resource limits
-unsafe fn setup_resource_limits(config: &SandboxConfiguration) {
+fn setup_resource_limits(config: &SandboxConfiguration) {
     if let Some(memory_limit) = config.memory_limit {
-        check_syscall!(set_resource_limit(RLIMIT_AS, memory_limit));
+        set_resource_limit(RLIMIT_AS, memory_limit);
     }
 
     if let Some(time_limit) = config.time_limit {
-        check_syscall!(set_resource_limit(RLIMIT_CPU, time_limit));
+        set_resource_limit(RLIMIT_CPU, time_limit);
     }
 
     // No core dumps
-    check_syscall!(set_resource_limit(RLIMIT_CORE, 0));
-}
-
-/// Create a device
-unsafe fn make_dev(path: &Path, major: u32, minor: u32) {
-    trace!(
-        "Make device {:?} with major = {}, minor = {}",
-        path,
-        major,
-        minor
-    );
-    let dev = CString::new(path.to_str().unwrap()).unwrap();
-    check_syscall!(mknod(
-        dev.as_ptr(),
-        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH,
-        makedev(major, minor)
-    ));
-}
-
-/// Mount a directory inside the sandbox
-unsafe fn mount_dir(dir: &DirectoryMount, sandbox_dir: &Path) {
-    trace!("Mount {:?}", dir);
-    assert_ne!(dir.target, Path::new("/"));
-
-    // Join destination with the sandbox directory
-    let target = sandbox_dir.join(dir.target.strip_prefix("/").unwrap());
-
-    mount(
-        dir.source.to_str().unwrap(),
-        &target,
-        "",
-        MS_BIND | MS_REC,
-        "",
-    );
-
-    if !dir.writable {
-        mount("", &target, "", MS_REMOUNT | MS_RDONLY | MS_BIND, "");
-    }
-}
-
-/// Wrapper around mount system call
-unsafe fn mount(source: &str, target: &Path, fstype: &str, options: u64, data: &str) {
-    fs::create_dir_all(target).unwrap();
-
-    trace!(
-        "mount({}, {:?}, {}, {}, {})",
-        source,
-        target,
-        fstype,
-        options,
-        data
-    );
-    let source = CString::new(source).unwrap();
-    let target = CString::new(target.to_str().unwrap()).unwrap();
-    let fstype = CString::new(fstype).unwrap();
-    let data = CString::new(data).unwrap();
-
-    check_syscall!(libc::mount(
-        source.as_ptr(),
-        target.as_ptr(),
-        fstype.as_ptr(),
-        options,
-        data.as_ptr() as *const c_void,
-    ));
-}
-
-/// Utility function to set resource limit
-unsafe fn set_resource_limit(resource: u32, limit: u64) -> i32 {
-    let r_limit = rlimit {
-        rlim_cur: limit,
-        rlim_max: limit,
-    };
-
-    setrlimit(resource, &r_limit)
+    set_resource_limit(RLIMIT_CORE, 0);
 }

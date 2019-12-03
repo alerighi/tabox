@@ -22,6 +22,9 @@ pub mod configuration;
 pub mod result;
 pub mod syscall_filter;
 
+#[macro_use]
+mod util;
+
 #[cfg(target_os = "linux")]
 mod linux;
 
