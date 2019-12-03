@@ -16,6 +16,7 @@ fn run_program(args: Vec<&str>) -> Output {
 fn run_shell(command: &str) -> ExecutionResult {
     let mut args = Vec::new();
     args.push("--json");
+    args.push("--allow-insecure");
     args.push("--env");
     args.push("PATH");
     args.push("--mount");
@@ -59,6 +60,7 @@ fn test_echo() {
 }
 
 /// Test no ping
+#[cfg(target_os = "linux")]
 #[test]
 fn test_ping() {
     let output = run_shell("ping 8.8.8.8 2>&1");
@@ -67,6 +69,7 @@ fn test_ping() {
 }
 
 /// Test no curl
+#[cfg(target_os = "linux")]
 #[test]
 fn test_curl() {
     let output = run_shell("curl 8.8.8.8 2>&1");
@@ -75,6 +78,7 @@ fn test_curl() {
 }
 
 /// Test blocking chmod
+#[cfg(target_os = "linux")]
 #[test]
 fn test_chmod() {
     let output = run_shell("bash -c 'touch file; chmod 777 file' 2>&1");

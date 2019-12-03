@@ -27,7 +27,7 @@ fn test_memory_limit_ok() {
 fn test_memory_limit_exceeded() {
     let program = r#"
        #include <stdlib.h>
-       int main() { int s = 256 * 1000000; char *m = malloc(s); for (int i = 0; i < s; i++) m[i] = i; return 0; }
+       int main() { int s = 512 * 1000000; char *m = malloc(s); for (int i = 0; i < s; i++) m[i] = i; return 0; }
     "#;
 
     let mut config = SandboxConfiguration::default();
@@ -50,6 +50,11 @@ fn test_time_limit_exceeded() {
 
     let result = exec(program, &mut config, "");
 
+    #[cfg(not(target_os = "linux"))]
+    assert_eq!(result.result.status, ExitStatus::Signal(24));
+
+    // For whatever reason Linux kills process with SIGKILL, instead of SIGXCPU
+    #[cfg(target_os = "linux")]
     assert_eq!(result.result.status, ExitStatus::Signal(9));
 }
 
@@ -90,7 +95,7 @@ fn test_wall_time_usage() {
 }
 
 #[test]
-fn test_wall_time_exeeded() {
+fn test_wall_time_exceeded() {
     let program = r#"
        #include <unistd.h>
        int main() { sleep(10); return 0; }

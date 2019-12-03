@@ -125,8 +125,6 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
 
     check_syscall!(wait4(child_pid, &mut status, 0, &mut rusage));
 
-    let end_time = time();
-
     let result = SandboxExecutionResult {
         status: unsafe {
             if killed.load(Ordering::SeqCst) {
@@ -143,7 +141,7 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
                 + rusage.ru_utime.tv_sec as f64,
             system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
                 + rusage.ru_stime.tv_sec as f64,
-            wall_time_usage: end_time - start_time,
+            wall_time_usage: time() - start_time,
         },
     };
 

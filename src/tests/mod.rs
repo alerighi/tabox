@@ -6,5 +6,8 @@
 mod basic;
 mod binary;
 mod limits;
+
+#[cfg(target_os = "linux")]
 mod security;
+
 mod util;

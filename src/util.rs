@@ -26,7 +26,13 @@ pub fn time() -> f64 {
 }
 
 /// Utility function to set a resource limit
-pub fn set_resource_limit(resource: u32, limit: u64) {
+#[cfg(target_os = "linux")]
+type Resource = u32;
+
+#[cfg(target_os = "macos")]
+type Resource = u32;
+
+pub fn set_resource_limit(resource: Resource, limit: u64) {
     let r_limit = libc::rlimit {
         rlim_cur: limit,
         rlim_max: limit,
