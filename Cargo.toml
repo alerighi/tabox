@@ -28,6 +28,9 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"
 core_affinity = "0.5"
+errno = "0.2"
+libc = "0.2"
+tempdir = "0.3"
 
 # tmbox binary dependencies
 structopt = { version = "0.3", optional = true }
@@ -35,7 +38,4 @@ env_logger = { version = "0.7", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 seccomp-sys = "0.1"
-errno = "0.2"
-libc = "0.2"
-tempdir = "0.3"
 

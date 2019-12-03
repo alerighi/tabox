@@ -114,8 +114,8 @@ impl Sandbox for MacOSSandbox {
         // This doesn't really work in tests. Since when running `cargo test` all
         // tests are run in the same process, here you will get the resource usage
         // of all child created, including the rust compiler itself if a build was involved!
-        // The solution is run the test that require checking CPU time and memory usage separated.
-        // In production is shouldn't be a problem, since there is one and only one child,
+        // The solution is to run the test that require checking CPU time and memory usage separated.
+        // In production this shouldn't be a problem, since there is one and only one child,
         // that is the process we intend to measure its resource usage.
         // Unfortunately it doesn't seem that there is a wait4 function in the libc crate,
         // and this is strange since it's mentioned in the MacOS manpage WAIT(2)...
