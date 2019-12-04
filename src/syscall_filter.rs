@@ -53,6 +53,8 @@ impl SyscallFilter {
             filter.add_rule("fchmod", SyscallFilterAction::Kill);
             filter.add_rule("fchmodat", SyscallFilterAction::Kill);
         }
+        filter.add_rule("setrlimit", SyscallFilterAction::Kill);
+        filter.add_rule("chroot", SyscallFilterAction::Kill);
         filter
     }
 

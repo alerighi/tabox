@@ -21,8 +21,9 @@ use libc::*;
 use seccomp_filter::*;
 use std::ffi::CString;
 use std::fs::File;
-use std::os::unix::io::IntoRawFd;
+use std::os::unix::process::CommandExt;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::ptr::null;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -156,13 +157,48 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
     assert_eq!(unsafe { getuid() }, 0);
     assert_eq!(unsafe { getgid() }, 0);
 
-    filesystem::create(config, sandbox_path);
-    setup_resource_limits(config);
-    setup_syscall_filter(config);
-    setup_io_redirection(config);
-    setup_thread_affinity(config);
-    enter_chroot(config, sandbox_path);
-    exec_child(config);
+    let mut command = Command::new(&config.executable);
+
+    command
+        .env_clear()
+        .envs(config.env.clone())
+        .args(&config.args);
+
+    if let Some(stdin) = &config.stdin {
+        command.stdin(Stdio::from(
+            File::open(stdin).expect("Cannot open stdin file"),
+        ));
+    }
+
+    if let Some(stdout) = &config.stdout {
+        command.stdout(Stdio::from(
+            File::create(stdout).expect("Cannot open stdout file"),
+        ));
+    }
+
+    if let Some(stderr) = &config.stderr {
+        command.stderr(Stdio::from(
+            File::create(stderr).expect("Cannot open stderr file"),
+        ));
+    }
+
+    let config = config.clone();
+    let sandbox_path = sandbox_path.to_owned();
+
+    unsafe {
+        // Execute right before exec()
+        command.pre_exec(move || {
+            filesystem::create(&config, &sandbox_path);
+            setup_thread_affinity(&config);
+            enter_chroot(&config, &sandbox_path);
+            setup_resource_limits(&config);
+            setup_syscall_filter(&config);
+            Ok(())
+        });
+    }
+
+    command.exec();
+    unreachable!();
 }
 
 /// Set cpu affinity
@@ -183,43 +219,16 @@ fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
     let root = CString::new(sandbox_path.to_str().unwrap()).unwrap();
     check_syscall!(chroot(root.as_ptr()));
 
+    // Check that things exits inside
+    assert!(config.executable.exists(), "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
+    assert!(
+        config.working_directory.exists(),
+        "Working directory doesn't exists inside chroot. Maybe you need to mount it?"
+    );
+
     // Change to  working directory
     let cwd = CString::new(config.working_directory.to_str().unwrap()).unwrap();
     check_syscall!(chdir(cwd.as_ptr()));
-}
-
-fn exec_child(config: &SandboxConfiguration) -> ! {
-    assert!(config.executable.exists(), "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
-
-    // Build args array
-    let mut args: Vec<CString> = Vec::new();
-    args.push(CString::new(config.executable.to_str().unwrap()).unwrap());
-    for arg in &config.args {
-        args.push(CString::new(arg.clone()).unwrap());
-    }
-
-    // Build environment array
-    let mut env: Vec<CString> = Vec::new();
-    for (variable, value) in &config.env {
-        env.push(CString::new(format!("{}={}", variable, value)).unwrap());
-    }
-
-    check_syscall!(execve(
-        args[0].as_ptr(),
-        to_c_array(&args).as_ptr(),
-        to_c_array(&env).as_ptr()
-    ));
-    unreachable!();
-}
-
-/// Convert CString array to null-terminated C array
-fn to_c_array(a: &[CString]) -> Vec<*const c_char> {
-    let mut result: Vec<*const c_char> = Vec::new();
-    for s in a {
-        result.push(s.as_ptr());
-    }
-    result.push(null());
-    result
 }
 
 /// Setup the Syscall filter
@@ -230,28 +239,6 @@ fn setup_syscall_filter(config: &SandboxConfiguration) {
             filter.filter(syscall, *action);
         }
         filter.load();
-    }
-}
-
-/// Setup stdio file redirection
-fn setup_io_redirection(config: &SandboxConfiguration) {
-    // Setup io redirection
-    if let Some(stdin) = &config.stdin {
-        let file = File::open(&stdin)
-            .unwrap_or_else(|_| panic!("Cannot open stdin file {:?} for reading", stdin));
-        check_syscall!(dup2(file.into_raw_fd(), 0));
-    }
-
-    if let Some(stdout) = &config.stdout {
-        let file = File::create(stdout)
-            .unwrap_or_else(|_| panic!("Cannot open stdout file {:?} for writing", stdout));
-        check_syscall!(dup2(file.into_raw_fd(), 1));
-    }
-
-    if let Some(stderr) = &config.stderr {
-        let file = File::create(stderr)
-            .unwrap_or_else(|_| panic!("Cannot open stderr file {:?} for writing", stderr));
-        check_syscall!(dup2(file.into_raw_fd(), 2));
     }
 }
 
