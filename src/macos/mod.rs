@@ -7,7 +7,7 @@ use crate::result::{ExitStatus, ResourceUsage};
 use crate::util::{set_resource_limit, time};
 use crate::{Result, Sandbox, SandboxConfiguration, SandboxExecutionResult};
 use std::fs::File;
-use std::os::unix::process::{CommandExt, ExitStatusExt};
+use std::os::unix::process::{CommandExt};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -18,6 +18,11 @@ pub struct MacOSSandbox {
     child: Child,
     start_time: f64,
     killed: Arc<AtomicBool>,
+}
+
+// MacOS libc crate seems to have miss this function...
+extern {
+    fn wait4(pid: libc::pid_t, status: *mut libc::c_int, options: libc::c_int, rusage: *mut libc::rusage) -> libc::pid_t;
 }
 
 impl Sandbox for MacOSSandbox {
@@ -106,31 +111,21 @@ impl Sandbox for MacOSSandbox {
         })
     }
 
-    fn wait(mut self) -> Result<SandboxExecutionResult> {
-        let status = self.child.wait()?;
-
+    fn wait(self) -> Result<SandboxExecutionResult> {
         let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
+        let mut status = 0;
 
-        // This doesn't really work in tests. Since when running `cargo test` all
-        // tests are run in the same process, here you will get the resource usage
-        // of all child created, including the rust compiler itself if a build was involved!
-        // The solution is to run the test that require checking CPU time and memory usage separated.
-        // In production this shouldn't be a problem, since there is one and only one child,
-        // that is the process we intend to measure its resource usage.
-        // Unfortunately it doesn't seem that there is a wait4 function in the libc crate,
-        // and this is strange since it's mentioned in the MacOS manpage WAIT(2)...
-        // Whatever, it's good enough
-        check_syscall!(libc::getrusage(libc::RUSAGE_CHILDREN, &mut rusage));
+        check_syscall!(wait4(self.child.id() as i32, &mut status, 0, &mut rusage));
 
         Ok(SandboxExecutionResult {
-            status: if self.killed.load(Ordering::SeqCst) {
-                ExitStatus::Killed
-            } else if let Some(exit_code) = status.code() {
-                ExitStatus::ExitCode(exit_code)
-            } else if let Some(signal) = status.signal() {
-                ExitStatus::Signal(signal)
-            } else {
-                unreachable!()
+            status: unsafe {
+                if self.killed.load(Ordering::SeqCst) {
+                    ExitStatus::Killed
+                } else if libc::WIFEXITED(status) {
+                    ExitStatus::ExitCode(libc::WEXITSTATUS(status))
+                } else {
+                    ExitStatus::Signal(libc::WTERMSIG(status))
+                }
             },
             resource_usage: ResourceUsage {
                 memory_usage: rusage.ru_maxrss as usize,
