@@ -15,8 +15,11 @@
 
 #[macro_use]
 extern crate log;
+extern crate errno;
+extern crate libc;
 extern crate serde;
 extern crate serde_json;
+extern crate tempdir;
 
 pub mod configuration;
 pub mod result;
@@ -28,17 +31,18 @@ mod util;
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[cfg(target_os = "linux")]
-pub type SandboxImplementation = linux::LinuxSandbox;
-
 #[cfg(target_os = "macos")]
 mod macos;
+
+/// The sandbox implementation
+#[cfg(target_os = "linux")]
+pub type SandboxImplementation = linux::LinuxSandbox;
 
 #[cfg(target_os = "macos")]
 pub type SandboxImplementation = macos::MacOSSandbox;
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-compile_error!("Sandbox not supported on your operating system");
+compile_error!("TAbox not supported on your operating system");
 
 #[cfg(test)]
 mod tests;

@@ -3,18 +3,14 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-extern crate core_affinity;
-extern crate errno;
-extern crate libc;
 extern crate seccomp_sys;
-extern crate tempdir;
 
 mod filesystem;
 mod seccomp_filter;
 
 use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::util::{set_resource_limit, time};
+use crate::util::set_resource_limit;
 use crate::{Result, Sandbox};
 
 use libc::*;
@@ -29,7 +25,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tempdir::TempDir;
 
 pub struct LinuxSandbox {
@@ -74,8 +70,6 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
         gid
     );
 
-    let start_time = time();
-
     // Start child in an unshared environment
     let child_pid = check_syscall!(syscall(
         SYS_clone,
@@ -101,6 +95,8 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
         // Start child process
         child(&config, sandbox_path);
     }
+
+    let start_time = Instant::now();
 
     let killed = Arc::new(AtomicBool::new(false));
 
@@ -142,7 +138,7 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
                 + rusage.ru_utime.tv_sec as f64,
             system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
                 + rusage.ru_stime.tv_sec as f64,
-            wall_time_usage: time() - start_time,
+            wall_time_usage: (Instant::now() - start_time).as_secs_f64(),
         },
     };
 

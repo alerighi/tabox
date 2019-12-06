@@ -4,25 +4,30 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::result::{ExitStatus, ResourceUsage};
-use crate::util::{set_resource_limit, time};
+use crate::util::set_resource_limit;
 use crate::{Result, Sandbox, SandboxConfiguration, SandboxExecutionResult};
 use std::fs::File;
-use std::os::unix::process::{CommandExt};
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 pub struct MacOSSandbox {
     child: Child,
-    start_time: f64,
+    start_time: Instant,
     killed: Arc<AtomicBool>,
 }
 
 // MacOS libc crate seems to have miss this function...
-extern {
-    fn wait4(pid: libc::pid_t, status: *mut libc::c_int, options: libc::c_int, rusage: *mut libc::rusage) -> libc::pid_t;
+extern "C" {
+    fn wait4(
+        pid: libc::pid_t,
+        status: *mut libc::c_int,
+        options: libc::c_int,
+        rusage: *mut libc::rusage,
+    ) -> libc::pid_t;
 }
 
 impl Sandbox for MacOSSandbox {
@@ -106,7 +111,7 @@ impl Sandbox for MacOSSandbox {
 
         Ok(MacOSSandbox {
             child,
-            start_time: time(),
+            start_time: Instant::now(),
             killed,
         })
     }
@@ -133,7 +138,7 @@ impl Sandbox for MacOSSandbox {
                     + rusage.ru_utime.tv_sec as f64,
                 system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
                     + rusage.ru_stime.tv_sec as f64,
-                wall_time_usage: time() - self.start_time,
+                wall_time_usage: (Instant::now() - self.start_time).as_secs_f64(),
             },
         })
     }
