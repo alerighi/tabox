@@ -15,11 +15,6 @@
 
 #[macro_use]
 extern crate log;
-extern crate errno;
-extern crate libc;
-extern crate serde;
-extern crate serde_json;
-extern crate tempdir;
 
 pub mod configuration;
 pub mod result;
@@ -47,21 +42,18 @@ compile_error!("TAbox not supported on your operating system");
 #[cfg(test)]
 mod tests;
 
-use crate::configuration::SandboxConfiguration;
-use crate::result::SandboxExecutionResult;
-
 /// Convenience result type
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 /// A trait that represents a Sandbox
 pub trait Sandbox {
     /// Execute the sandbox
-    fn run(config: SandboxConfiguration) -> Result<Self>
+    fn run(config: configuration::SandboxConfiguration) -> Result<Self>
     where
         Self: Sized;
 
     /// Wait the process to terminate, giving back the execution result
-    fn wait(self) -> Result<SandboxExecutionResult>;
+    fn wait(self) -> Result<result::SandboxExecutionResult>;
 
     /// Return true if the sandbox implementation is secure
     fn is_secure() -> bool;

@@ -18,13 +18,13 @@ macro_rules! check_syscall {
     }};
 }
 
-/// Utility function to set a resource limit
 #[cfg(target_os = "linux")]
 type Resource = u32;
 
 #[cfg(target_os = "macos")]
 type Resource = i32;
 
+/// Utility function to set a resource limit
 pub fn set_resource_limit(resource: Resource, limit: u64) {
     let r_limit = libc::rlimit {
         rlim_cur: limit,

@@ -3,7 +3,7 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-extern crate seccomp_sys;
+//! This module contains the sandbox for Linux
 
 mod filesystem;
 mod seccomp_filter;

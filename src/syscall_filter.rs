@@ -3,6 +3,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
+//! Module that contains types about the system call filter (supported only on Linux)
+
 use serde::{Deserialize, Serialize};
 
 /// System call filter action

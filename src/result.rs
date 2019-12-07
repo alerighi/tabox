@@ -3,6 +3,8 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
+//! This module contains types for the result of an execution
+
 use serde::{Deserialize, Serialize};
 
 /// Struct that contains the information about resource usage of the process
@@ -36,12 +38,12 @@ pub enum ExitStatus {
 
 impl ExitStatus {
     /// True if the process executed correctly (return with exit status 0)
-    pub fn is_success(self) -> bool {
+    pub fn success(self) -> bool {
         self == ExitStatus::ExitCode(0)
     }
 }
 
-/// struct that rappresents the execution result of a sandbox
+/// struct that represents the execution result of a sandbox
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxExecutionResult {
     /// Exit status of the process

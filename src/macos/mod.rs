@@ -2,10 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
+//! This module contains the sandbox for MacOS
 
-use crate::result::{ExitStatus, ResourceUsage};
+use crate::configuration::SandboxConfiguration;
+use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
 use crate::util::set_resource_limit;
-use crate::{Result, Sandbox, SandboxConfiguration, SandboxExecutionResult};
+use crate::{Result, Sandbox};
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};

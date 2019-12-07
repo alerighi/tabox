@@ -20,7 +20,7 @@ fn test_memory_limit_ok() {
     let result = exec(program, &mut config, "");
 
     assert!(result.result.resource_usage.memory_usage > 200_000_000);
-    assert!(result.result.status.is_success());
+    assert!(result.result.status.success());
 }
 
 #[test]

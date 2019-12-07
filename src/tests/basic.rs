@@ -20,7 +20,7 @@ fn test_ok_program() {
 
     let result = exec(program, &mut config, "");
 
-    assert!(result.result.status.is_success());
+    assert!(result.result.status.success());
     assert_eq!(result.stdout, "hello, world!");
     assert_eq!(result.stderr, "error");
 }

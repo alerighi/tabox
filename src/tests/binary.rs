@@ -64,7 +64,7 @@ fn test_echo() {
 #[test]
 fn test_ping() {
     let output = run_shell("ping 8.8.8.8 2>&1");
-    assert!(!output.result.status.is_success());
+    assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(2));
 }
 
@@ -73,7 +73,7 @@ fn test_ping() {
 #[test]
 fn test_curl() {
     let output = run_shell("curl 8.8.8.8 2>&1");
-    assert!(!output.result.status.is_success());
+    assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(7));
 }
 
@@ -82,5 +82,5 @@ fn test_curl() {
 #[test]
 fn test_chmod() {
     let output = run_shell("bash -c 'touch file; chmod 777 file' 2>&1");
-    assert!(!output.result.status.is_success());
+    assert!(!output.result.status.success());
 }
