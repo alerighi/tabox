@@ -16,6 +16,9 @@
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate failure;
+
 pub mod configuration;
 pub mod result;
 pub mod syscall_filter;

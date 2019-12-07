@@ -10,7 +10,7 @@ mod seccomp_filter;
 
 use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::util::set_resource_limit;
+use crate::util::{setup_resource_limits, wait};
 use crate::{Result, Sandbox};
 
 use nix::sys::signal::{kill, Signal};
@@ -36,7 +36,7 @@ impl Sandbox for LinuxSandbox {
         // Start a child process to setup the sandboxhttps://www.reddit.com/r/AskReddit/
         let handle = thread::Builder::new()
             .name("Sandbox watcher".into())
-            .spawn(move || watcher(config))?;
+            .spawn(move || watcher(config).expect("Error starting sandbox watcher"))?;
 
         Ok(LinuxSandbox {
             child_thread: handle,
@@ -52,8 +52,8 @@ impl Sandbox for LinuxSandbox {
     }
 }
 
-fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
-    let tempdir = tempdir::TempDir::new("tabox").expect("Cannot create temporary directory");
+fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
+    let tempdir = tempdir::TempDir::new("tabox")?;
     let sandbox_path = tempdir.path();
 
     // uid/gid from outside the sandbox
@@ -68,29 +68,37 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
     );
 
     // Start child in an unshared environment
-    let child_pid = check_syscall!(libc::syscall(
-        libc::SYS_clone,
-        libc::CLONE_NEWIPC
-            | libc::CLONE_NEWNET
-            | libc::CLONE_NEWNS
-            | libc::CLONE_NEWPID
-            | libc::CLONE_NEWUSER
-            | libc::CLONE_NEWUTS
-            | libc::SIGCHLD,
-        null::<libc::c_void>(),
-    )) as libc::pid_t;
+    let child_pid = unsafe {
+        libc::syscall(
+            libc::SYS_clone,
+            libc::CLONE_NEWIPC
+                | libc::CLONE_NEWNET
+                | libc::CLONE_NEWNS
+                | libc::CLONE_NEWPID
+                | libc::CLONE_NEWUSER
+                | libc::CLONE_NEWUTS
+                | libc::SIGCHLD,
+            null::<libc::c_void>(),
+        )
+    } as libc::pid_t;
+
+    if child_pid < 0 {
+        return Err(failure::err_msg("clone() error"));
+    }
 
     if child_pid == 0 {
         // Map current uid/gid to root/root inside the sandbox
-        std::fs::write("/proc/self/setgroups", "deny").unwrap();
-        std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid.as_raw())).unwrap();
-        std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid.as_raw())).unwrap();
+        std::fs::write("/proc/self/setgroups", "deny")?;
+        std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid.as_raw()))?;
+        std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid.as_raw()))?;
 
         // When parent dies, I want to die too
-        check_syscall!(libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL));
+        if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) < 0 } {
+            return Err(failure::err_msg("Error calling prctl()"));
+        };
 
         // Start child process
-        child(&config, sandbox_path);
+        child(&config, sandbox_path)?;
     }
 
     let start_time = Instant::now();
@@ -110,43 +118,27 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
                     .expect("Error killing child due to wall limit exceeded");
 
                 killed.store(true, Ordering::SeqCst);
-            })
-            .expect("Error spawning wall time watcher thread");
+            })?;
     }
 
-    // Wait process to terminate and get its resource consumption
-    let mut status = 0;
-    let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
+    // Wait child for completion
+    let (status, resource_usage) = wait(child_pid)?;
 
-    check_syscall!(libc::wait4(child_pid, &mut status, 0, &mut rusage));
-
-    let result = SandboxExecutionResult {
-        status: unsafe {
-            if killed.load(Ordering::SeqCst) {
-                ExitStatus::Killed
-            } else if libc::WIFEXITED(status) {
-                ExitStatus::ExitCode(libc::WEXITSTATUS(status))
-            } else {
-                ExitStatus::Signal(libc::WTERMSIG(status))
-            }
+    Ok(SandboxExecutionResult {
+        status: if killed.load(Ordering::SeqCst) {
+            ExitStatus::Killed
+        } else {
+            status
         },
         resource_usage: ResourceUsage {
-            memory_usage: rusage.ru_maxrss as usize * 1024,
-            user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0
-                + rusage.ru_utime.tv_sec as f64,
-            system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
-                + rusage.ru_stime.tv_sec as f64,
             wall_time_usage: (Instant::now() - start_time).as_secs_f64(),
+            ..resource_usage
         },
-    };
-
-    trace!("Child terminated, result = {:?}", result);
-
-    result
+    })
 }
 
 /// Child process
-fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
+fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> {
     assert_eq!(unistd::getpid().as_raw(), 1);
     assert_eq!(unistd::getuid().as_raw(), 0);
     assert_eq!(unistd::getgid().as_raw(), 0);
@@ -159,21 +151,15 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
         .args(&config.args);
 
     if let Some(stdin) = &config.stdin {
-        command.stdin(Stdio::from(
-            File::open(stdin).expect("Cannot open stdin file"),
-        ));
+        command.stdin(Stdio::from(File::open(stdin)?));
     }
 
     if let Some(stdout) = &config.stdout {
-        command.stdout(Stdio::from(
-            File::create(stdout).expect("Cannot open stdout file"),
-        ));
+        command.stdout(Stdio::from(File::create(stdout)?));
     }
 
     if let Some(stderr) = &config.stderr {
-        command.stderr(Stdio::from(
-            File::create(stderr).expect("Cannot open stderr file"),
-        ));
+        command.stderr(Stdio::from(File::create(stderr)?));
     }
 
     let config = config.clone();
@@ -185,14 +171,14 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
             filesystem::create(&config, &sandbox_path).expect("Error creating filesystem");
             setup_thread_affinity(&config).expect("Error setting thread affinity");
             enter_chroot(&config, &sandbox_path).expect("Error entering in chroot");
-            setup_resource_limits(&config);
-            setup_syscall_filter(&config);
+            setup_resource_limits(&config).expect("Error setting up resource limits");
+            setup_syscall_filter(&config).expect("Error setting up syscall filter");
             Ok(())
         });
     }
 
-    command.exec();
-    unreachable!();
+    // This can only return Err... nice!
+    Err(failure::Error::from(command.exec()))
 }
 
 /// Set cpu affinity
@@ -223,26 +209,13 @@ fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) -> nix::Resu
 }
 
 /// Setup the Syscall filter
-fn setup_syscall_filter(config: &SandboxConfiguration) {
+fn setup_syscall_filter(config: &SandboxConfiguration) -> Result<()> {
     if let Some(syscall_filter) = &config.syscall_filter {
-        let mut filter = seccomp_filter::SeccompFilter::new(syscall_filter.default_action);
+        let mut filter = seccomp_filter::SeccompFilter::new(syscall_filter.default_action)?;
         for (syscall, action) in &syscall_filter.rules {
-            filter.filter(syscall, *action);
+            filter.filter(syscall, *action)?;
         }
-        filter.load();
+        filter.load()?;
     }
-}
-
-/// Setup the resource limits
-fn setup_resource_limits(config: &SandboxConfiguration) {
-    if let Some(memory_limit) = config.memory_limit {
-        set_resource_limit(libc::RLIMIT_AS, memory_limit);
-    }
-
-    if let Some(time_limit) = config.time_limit {
-        set_resource_limit(libc::RLIMIT_CPU, time_limit);
-    }
-
-    // No core dumps
-    set_resource_limit(libc::RLIMIT_CORE, 0);
+    Ok(())
 }

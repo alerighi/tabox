@@ -6,8 +6,10 @@
 
 use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::util::set_resource_limit;
+use crate::util::{setup_resource_limits, wait};
 use crate::{Result, Sandbox};
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
@@ -22,16 +24,6 @@ pub struct MacOSSandbox {
     killed: Arc<AtomicBool>,
 }
 
-// MacOS libc crate seems to have miss this function...
-extern "C" {
-    fn wait4(
-        pid: libc::pid_t,
-        status: *mut libc::c_int,
-        options: libc::c_int,
-        rusage: *mut libc::rusage,
-    ) -> libc::pid_t;
-}
-
 impl Sandbox for MacOSSandbox {
     fn run(config: SandboxConfiguration) -> Result<Self> {
         let mut command = Command::new(&config.executable);
@@ -41,15 +33,7 @@ impl Sandbox for MacOSSandbox {
 
             // This code get executed after the fork() and before the exec()
             command.pre_exec(move || {
-                set_resource_limit(libc::RLIMIT_CORE, 0);
-
-                if let Some(memory_limit) = config.memory_limit {
-                    set_resource_limit(libc::RLIMIT_RSS, memory_limit); // this doesn't really work
-                }
-
-                if let Some(time_limit) = config.time_limit {
-                    set_resource_limit(libc::RLIMIT_CPU, time_limit);
-                }
+                setup_resource_limits(&config).expect("Error setting resource limits");
                 Ok(())
             });
         }
@@ -87,7 +71,8 @@ impl Sandbox for MacOSSandbox {
                         if get_macos_memory_usage(child_pid) > memory_limit {
                             // Kill process if memory limit exceeded.
                             // Send SIGSEGV since it's the same that sends Linux.
-                            check_syscall!(libc::kill(child_pid, libc::SIGSEGV));
+                            kill(Pid::from_raw(child_pid), Signal::SIGSEGV)
+                                .expect("Error killing child due to memory limit exceeded");
                         }
 
                         thread::sleep(Duration::new(0, 1_000));
@@ -105,7 +90,8 @@ impl Sandbox for MacOSSandbox {
                     thread::sleep(Duration::new(limit, 0));
 
                     // Kill process if it didn't terminate in wall limit
-                    check_syscall!(libc::kill(child_pid, libc::SIGKILL));
+                    kill(Pid::from_raw(child_pid), Signal::SIGKILL)
+                        .expect("Error killing child due to wall limit exceeded");
 
                     killed.store(true, Ordering::SeqCst);
                 })?;
@@ -119,28 +105,18 @@ impl Sandbox for MacOSSandbox {
     }
 
     fn wait(self) -> Result<SandboxExecutionResult> {
-        let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
-        let mut status = 0;
-
-        check_syscall!(wait4(self.child.id() as i32, &mut status, 0, &mut rusage));
+        // Wait child for completion
+        let (status, resource_usage) = wait(self.child.id() as libc::pid_t)?;
 
         Ok(SandboxExecutionResult {
-            status: unsafe {
-                if self.killed.load(Ordering::SeqCst) {
-                    ExitStatus::Killed
-                } else if libc::WIFEXITED(status) {
-                    ExitStatus::ExitCode(libc::WEXITSTATUS(status))
-                } else {
-                    ExitStatus::Signal(libc::WTERMSIG(status))
-                }
+            status: if killed.load(Ordering::SeqCst) {
+                ExitStatus::Killed
+            } else {
+                status
             },
             resource_usage: ResourceUsage {
-                memory_usage: rusage.ru_maxrss as usize,
-                user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0
-                    + rusage.ru_utime.tv_sec as f64,
-                system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
-                    + rusage.ru_stime.tv_sec as f64,
                 wall_time_usage: (Instant::now() - self.start_time).as_secs_f64(),
+                ..resource_usage
             },
         })
     }
