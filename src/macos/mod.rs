@@ -109,7 +109,7 @@ impl Sandbox for MacOSSandbox {
         let (status, resource_usage) = wait(self.child.id() as libc::pid_t)?;
 
         Ok(SandboxExecutionResult {
-            status: if killed.load(Ordering::SeqCst) {
+            status: if self.killed.load(Ordering::SeqCst) {
                 ExitStatus::Killed
             } else {
                 status
