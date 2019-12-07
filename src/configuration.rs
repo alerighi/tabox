@@ -66,7 +66,7 @@ pub struct SandboxConfiguration {
     pub wall_time_limit: Option<u64>,
 
     /// Set on which CPU core to run the sandbox
-    pub cpu_core: Option<u8>,
+    pub cpu_core: Option<usize>,
 }
 
 impl Default for SandboxConfiguration {
@@ -183,7 +183,7 @@ impl SandboxConfiguration {
     }
 
     /// Run the sandbox on the specified cpu core
-    pub fn run_on_core(&mut self, value: u8) -> &mut Self {
+    pub fn run_on_core(&mut self, value: usize) -> &mut Self {
         self.cpu_core = Some(value);
         self
     }

@@ -4,29 +4,28 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::syscall_filter::SyscallFilterAction;
-use seccomp_sys::*;
 use std::ffi::CString;
 
 impl SyscallFilterAction {
     /// Transform the Action to the correct seccomp parameter
     fn to_seccomp_param(self) -> u32 {
         match self {
-            SyscallFilterAction::Allow => SCMP_ACT_ALLOW,
-            SyscallFilterAction::Kill => SCMP_ACT_KILL,
-            SyscallFilterAction::Errno(errno) => SCMP_ACT_ERRNO(errno),
+            SyscallFilterAction::Allow => seccomp_sys::SCMP_ACT_ALLOW,
+            SyscallFilterAction::Kill => seccomp_sys::SCMP_ACT_KILL,
+            SyscallFilterAction::Errno(errno) => seccomp_sys::SCMP_ACT_ERRNO(errno),
         }
     }
 }
 
 /// Wrapper of a libseccomp filter object
 pub struct SeccompFilter {
-    ctx: *mut scmp_filter_ctx,
+    ctx: *mut seccomp_sys::scmp_filter_ctx,
 }
 
 impl SeccompFilter {
     /// Create a new filter
     pub fn new(default_action: SyscallFilterAction) -> SeccompFilter {
-        let ctx = unsafe { seccomp_init(default_action.to_seccomp_param()) };
+        let ctx = unsafe { seccomp_sys::seccomp_init(default_action.to_seccomp_param()) };
         if ctx.is_null() {
             panic!("Error initializing seccomp filter");
         }
@@ -38,8 +37,10 @@ impl SeccompFilter {
         debug!("Add rule {} {:?}", name, action);
         let syscall_name = CString::new(name).unwrap();
         unsafe {
-            let syscall_num = check_syscall!(seccomp_syscall_resolve_name(syscall_name.as_ptr()));
-            check_syscall!(seccomp_rule_add(
+            let syscall_num = check_syscall!(seccomp_sys::seccomp_syscall_resolve_name(
+                syscall_name.as_ptr()
+            ));
+            check_syscall!(seccomp_sys::seccomp_rule_add(
                 self.ctx,
                 action.to_seccomp_param(),
                 syscall_num,
@@ -51,7 +52,7 @@ impl SeccompFilter {
     /// Load the specified filter
     pub fn load(&self) {
         unsafe {
-            check_syscall!(seccomp_load(self.ctx));
+            check_syscall!(seccomp_sys::seccomp_load(self.ctx));
         }
     }
 }
@@ -59,7 +60,7 @@ impl SeccompFilter {
 impl Drop for SeccompFilter {
     fn drop(&mut self) {
         unsafe {
-            seccomp_release(self.ctx);
+            seccomp_sys::seccomp_release(self.ctx);
         }
     }
 }

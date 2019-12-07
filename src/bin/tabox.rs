@@ -88,7 +88,7 @@ struct Args {
 
     /// Run on the specified cpu core
     #[structopt(long)]
-    cpu_core: Option<u8>,
+    cpu_core: Option<usize>,
 }
 
 fn main() {

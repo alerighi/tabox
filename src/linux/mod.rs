@@ -13,9 +13,8 @@ use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
 use crate::util::set_resource_limit;
 use crate::{Result, Sandbox};
 
-use libc::*;
-use seccomp_filter::*;
-use std::ffi::CString;
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::{self, Pid};
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
@@ -23,10 +22,8 @@ use std::process::{Command, Stdio};
 use std::ptr::null;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread;
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
-use tempdir::TempDir;
 
 pub struct LinuxSandbox {
     child_thread: JoinHandle<SandboxExecutionResult>,
@@ -56,41 +53,41 @@ impl Sandbox for LinuxSandbox {
 }
 
 fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
-    let tempdir = TempDir::new("tabox").expect("Cannot create temporary directory");
+    let tempdir = tempdir::TempDir::new("tabox").expect("Cannot create temporary directory");
     let sandbox_path = tempdir.path();
 
     // uid/gid from outside the sandbox
-    let uid = unsafe { getuid() };
-    let gid = unsafe { getgid() };
+    let uid = unistd::getuid();
+    let gid = unistd::getgid();
 
     trace!(
         "Watcher process started, PID = {}, uid = {}, gid = {}",
-        unsafe { getpid() },
+        unistd::getpid(),
         uid,
         gid
     );
 
     // Start child in an unshared environment
-    let child_pid = check_syscall!(syscall(
-        SYS_clone,
-        CLONE_NEWIPC
-            | CLONE_NEWNET
-            | CLONE_NEWNS
-            | CLONE_NEWPID
-            | CLONE_NEWUSER
-            | CLONE_NEWUTS
-            | SIGCHLD,
-        null::<c_void>(),
-    )) as pid_t;
+    let child_pid = check_syscall!(libc::syscall(
+        libc::SYS_clone,
+        libc::CLONE_NEWIPC
+            | libc::CLONE_NEWNET
+            | libc::CLONE_NEWNS
+            | libc::CLONE_NEWPID
+            | libc::CLONE_NEWUSER
+            | libc::CLONE_NEWUTS
+            | libc::SIGCHLD,
+        null::<libc::c_void>(),
+    )) as libc::pid_t;
 
     if child_pid == 0 {
         // Map current uid/gid to root/root inside the sandbox
         std::fs::write("/proc/self/setgroups", "deny").unwrap();
-        std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid)).unwrap();
-        std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid)).unwrap();
+        std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid.as_raw())).unwrap();
+        std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid.as_raw())).unwrap();
 
         // When parent dies, I want to die too
-        check_syscall!(prctl(PR_SET_PDEATHSIG, SIGKILL));
+        check_syscall!(libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL));
 
         // Start child process
         child(&config, sandbox_path);
@@ -109,7 +106,8 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
                 thread::sleep(Duration::new(limit, 0));
 
                 // Kill process if it didn't terminate in wall limit
-                check_syscall!(kill(child_pid, SIGKILL));
+                kill(Pid::from_raw(child_pid), Signal::SIGKILL)
+                    .expect("Error killing child due to wall limit exceeded");
 
                 killed.store(true, Ordering::SeqCst);
             })
@@ -118,18 +116,18 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
 
     // Wait process to terminate and get its resource consumption
     let mut status = 0;
-    let mut rusage: rusage = unsafe { std::mem::zeroed() };
+    let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
 
-    check_syscall!(wait4(child_pid, &mut status, 0, &mut rusage));
+    check_syscall!(libc::wait4(child_pid, &mut status, 0, &mut rusage));
 
     let result = SandboxExecutionResult {
         status: unsafe {
             if killed.load(Ordering::SeqCst) {
                 ExitStatus::Killed
-            } else if WIFEXITED(status) {
-                ExitStatus::ExitCode(WEXITSTATUS(status))
+            } else if libc::WIFEXITED(status) {
+                ExitStatus::ExitCode(libc::WEXITSTATUS(status))
             } else {
-                ExitStatus::Signal(WTERMSIG(status))
+                ExitStatus::Signal(libc::WTERMSIG(status))
             }
         },
         resource_usage: ResourceUsage {
@@ -149,9 +147,9 @@ fn watcher(config: SandboxConfiguration) -> SandboxExecutionResult {
 
 /// Child process
 fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
-    assert_eq!(unsafe { getpid() }, 1);
-    assert_eq!(unsafe { getuid() }, 0);
-    assert_eq!(unsafe { getgid() }, 0);
+    assert_eq!(unistd::getpid().as_raw(), 1);
+    assert_eq!(unistd::getuid().as_raw(), 0);
+    assert_eq!(unistd::getgid().as_raw(), 0);
 
     let mut command = Command::new(&config.executable);
 
@@ -184,9 +182,9 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
     unsafe {
         // Execute right before exec()
         command.pre_exec(move || {
-            filesystem::create(&config, &sandbox_path);
-            setup_thread_affinity(&config);
-            enter_chroot(&config, &sandbox_path);
+            filesystem::create(&config, &sandbox_path).expect("Error creating filesystem");
+            setup_thread_affinity(&config).expect("Error setting thread affinity");
+            enter_chroot(&config, &sandbox_path).expect("Error entering in chroot");
             setup_resource_limits(&config);
             setup_syscall_filter(&config);
             Ok(())
@@ -198,22 +196,19 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> ! {
 }
 
 /// Set cpu affinity
-fn setup_thread_affinity(config: &SandboxConfiguration) {
+fn setup_thread_affinity(config: &SandboxConfiguration) -> nix::Result<()> {
     if let Some(core) = config.cpu_core {
-        unsafe {
-            let mut cpu: cpu_set_t = std::mem::zeroed();
-            CPU_ZERO(&mut cpu);
-            CPU_SET(core as usize, &mut cpu);
-            check_syscall!(sched_setaffinity(1, 1, &cpu));
-        }
+        let mut cpu_set = nix::sched::CpuSet::new();
+        cpu_set.set(core)?;
+        nix::sched::sched_setaffinity(Pid::from_raw(0), &cpu_set)?
     }
+    Ok(())
 }
 
 /// Enter the sandbox chroot and change directory
-fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
+fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) -> nix::Result<()> {
     // Chroot into the sandbox
-    let root = CString::new(sandbox_path.to_str().unwrap()).unwrap();
-    check_syscall!(chroot(root.as_ptr()));
+    unistd::chroot(sandbox_path)?;
 
     // Check that things exits inside
     assert!(config.executable.exists(), "Executable doesn't exist inside the sandbox chroot. Perhaps you need to mount some directories?");
@@ -223,14 +218,14 @@ fn enter_chroot(config: &SandboxConfiguration, sandbox_path: &Path) {
     );
 
     // Change to  working directory
-    let cwd = CString::new(config.working_directory.to_str().unwrap()).unwrap();
-    check_syscall!(chdir(cwd.as_ptr()));
+    unistd::chdir(&config.working_directory)?;
+    Ok(())
 }
 
 /// Setup the Syscall filter
 fn setup_syscall_filter(config: &SandboxConfiguration) {
     if let Some(syscall_filter) = &config.syscall_filter {
-        let mut filter = SeccompFilter::new(syscall_filter.default_action);
+        let mut filter = seccomp_filter::SeccompFilter::new(syscall_filter.default_action);
         for (syscall, action) in &syscall_filter.rules {
             filter.filter(syscall, *action);
         }
@@ -241,13 +236,13 @@ fn setup_syscall_filter(config: &SandboxConfiguration) {
 /// Setup the resource limits
 fn setup_resource_limits(config: &SandboxConfiguration) {
     if let Some(memory_limit) = config.memory_limit {
-        set_resource_limit(RLIMIT_AS, memory_limit);
+        set_resource_limit(libc::RLIMIT_AS, memory_limit);
     }
 
     if let Some(time_limit) = config.time_limit {
-        set_resource_limit(RLIMIT_CPU, time_limit);
+        set_resource_limit(libc::RLIMIT_CPU, time_limit);
     }
 
     // No core dumps
-    set_resource_limit(RLIMIT_CORE, 0);
+    set_resource_limit(libc::RLIMIT_CORE, 0);
 }

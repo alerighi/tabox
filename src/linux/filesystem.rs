@@ -4,105 +4,105 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use crate::configuration::{DirectoryMount, SandboxConfiguration};
-use libc::*;
-use std::ffi::CString;
+use crate::Result;
+
+use nix::mount::{mount, MsFlags};
+use nix::sys::stat::{makedev, mknod, Mode, SFlag};
 use std::fs;
 use std::path::Path;
 
 /// Create the sandbox filesystem
-pub fn create(config: &SandboxConfiguration, sandbox_path: &Path) {
+pub fn create(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> {
     // Create the sandbox dir and mount a tmpfs in it
-    mount("tmpfs", &sandbox_path, "tmpfs", 0, "size=256M");
+    mount(
+        Some("tmpfs"),
+        sandbox_path,
+        Some("tmpfs"),
+        MsFlags::empty(),
+        Some("size=256M"),
+    )?;
 
     // Create /dev
     let dev = sandbox_path.join("dev");
-    fs::create_dir_all(&dev).unwrap();
+    fs::create_dir_all(&dev)?;
 
-    make_dev(&dev.join("null"), 1, 3);
-    make_dev(&dev.join("zero"), 1, 5);
-    make_dev(&dev.join("random"), 1, 8);
-    make_dev(&dev.join("urandom"), 1, 9);
+    make_dev(&dev.join("null"), 1, 3)?;
+    make_dev(&dev.join("zero"), 1, 5)?;
+    make_dev(&dev.join("random"), 1, 8)?;
+    make_dev(&dev.join("urandom"), 1, 9)?;
 
     // Mount /tmp and /dev/shm
     if config.mount_tmpfs {
-        mount("tmpfs", &sandbox_path.join("tmp"), "tmpfs", 0, "size=256M");
-        mount(
-            "tmpfs",
-            &sandbox_path.join("dev/shm"),
-            "tmpfs",
-            0,
-            "size=256M",
-        );
+        for path in &["tmp", "dev/shm"] {
+            let path = sandbox_path.join(path);
+            fs::create_dir_all(&path)?;
+            mount(
+                Some("tmpfs"),
+                &path,
+                Some("tmpfs"),
+                MsFlags::empty(),
+                Some("size=256M"),
+            )?;
+        }
     }
 
     // bind mount the readable directories into the sandbox
     for dir in &config.mount_paths {
-        mount_dir(dir, sandbox_path);
+        mount_dir(dir, sandbox_path)?;
     }
 
     // Remount tmpfs read only
-    mount("tmpfs", &sandbox_path, "tmpfs", MS_REMOUNT | MS_RDONLY, "");
+    mount(
+        None as Option<&str>,
+        sandbox_path,
+        None as Option<&str>,
+        MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY,
+        None as Option<&str>,
+    )?;
+    Ok(())
 }
 
 /// Create a device
-fn make_dev(path: &Path, major: u32, minor: u32) {
-    trace!(
-        "Make device {:?} with major = {}, minor = {}",
+fn make_dev(path: &Path, major: u64, minor: u64) -> nix::Result<()> {
+    mknod(
         path,
-        major,
-        minor
-    );
-    let dev = CString::new(path.to_str().unwrap()).unwrap();
-    check_syscall!(mknod(
-        dev.as_ptr(),
-        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH,
-        makedev(major, minor)
-    ));
+        SFlag::empty(),
+        Mode::S_IRUSR
+            | Mode::S_IWUSR
+            | Mode::S_IRGRP
+            | Mode::S_IWGRP
+            | Mode::S_IROTH
+            | Mode::S_IWOTH,
+        makedev(major, minor),
+    )
 }
 
 /// Mount a directory inside the sandbox
-fn mount_dir(dir: &DirectoryMount, sandbox_dir: &Path) {
+fn mount_dir(dir: &DirectoryMount, sandbox_dir: &Path) -> Result<()> {
     trace!("Mount {:?}", dir);
     assert_ne!(dir.target, Path::new("/"));
 
     // Join destination with the sandbox directory
-    let target = sandbox_dir.join(dir.target.strip_prefix("/").unwrap());
+    let target = sandbox_dir.join(dir.target.strip_prefix("/")?);
+
+    fs::create_dir_all(&target)?;
 
     mount(
-        dir.source.to_str().unwrap(),
+        Some(&dir.source),
         &target,
-        "",
-        MS_BIND | MS_REC,
-        "",
-    );
+        None as Option<&str>,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
+        None as Option<&str>,
+    )?;
 
     if !dir.writable {
-        mount("", &target, "", MS_REMOUNT | MS_RDONLY | MS_BIND, "");
+        mount(
+            None as Option<&str>,
+            &target,
+            None as Option<&str>,
+            MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | MsFlags::MS_BIND,
+            None as Option<&str>,
+        )?;
     }
-}
-
-/// Wrapper around mount system call
-fn mount(source: &str, target: &Path, fstype: &str, options: u64, data: &str) {
-    fs::create_dir_all(target).unwrap();
-
-    trace!(
-        "mount({}, {:?}, {}, {}, {})",
-        source,
-        target,
-        fstype,
-        options,
-        data
-    );
-    let source = CString::new(source).unwrap();
-    let target = CString::new(target.to_str().unwrap()).unwrap();
-    let fstype = CString::new(fstype).unwrap();
-    let data = CString::new(data).unwrap();
-
-    check_syscall!(libc::mount(
-        source.as_ptr(),
-        target.as_ptr(),
-        fstype.as_ptr(),
-        options,
-        data.as_ptr() as *const c_void,
-    ));
+    Ok(())
 }
