@@ -3,9 +3,6 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-extern crate env_logger;
-extern crate serde_json;
-extern crate structopt;
 #[macro_use]
 extern crate log;
 

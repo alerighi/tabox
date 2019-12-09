@@ -33,7 +33,7 @@ impl Sandbox for LinuxSandbox {
     fn run(config: SandboxConfiguration) -> Result<Self> {
         trace!("Run LinuxSandbox with config {:?}", config);
 
-        // Start a child process to setup the sandboxhttps://www.reddit.com/r/AskReddit/
+        // Start a child process to setup the sandbox
         let handle = thread::Builder::new()
             .name("Sandbox watcher".into())
             .spawn(move || watcher(config).expect("Error starting sandbox watcher"))?;

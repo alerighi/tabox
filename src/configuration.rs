@@ -96,7 +96,7 @@ impl SandboxConfiguration {
         self.clone()
     }
 
-    /// Set the time limit
+    /// Set the time limit in seconds
     pub fn time_limit(&mut self, time_limit: u64) -> &mut Self {
         self.time_limit = Some(time_limit);
         self
@@ -109,20 +109,20 @@ impl SandboxConfiguration {
     }
 
     /// Set the standard input file path
-    pub fn stdin(&mut self, stdin: PathBuf) -> &mut Self {
-        self.stdin = Some(stdin);
+    pub fn stdin<P: Into<PathBuf>>(&mut self, stdin: P) -> &mut Self {
+        self.stdin = Some(stdin.into());
         self
     }
 
     /// Set the standard output file path
-    pub fn stdout(&mut self, stdout: PathBuf) -> &mut Self {
-        self.stdout = Some(stdout);
+    pub fn stdout<P: Into<PathBuf>>(&mut self, stdout: P) -> &mut Self {
+        self.stdout = Some(stdout.into());
         self
     }
 
     /// Set the standard error file path
-    pub fn stderr(&mut self, stderr: PathBuf) -> &mut Self {
-        self.stderr = Some(stderr);
+    pub fn stderr<P: Into<PathBuf>>(&mut self, stderr: P) -> &mut Self {
+        self.stderr = Some(stderr.into());
         self
     }
 
