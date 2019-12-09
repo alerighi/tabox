@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ResourceUsage {
     /// Memory usage in bytes
-    pub memory_usage: usize,
+    pub memory_usage: u64,
 
     /// User cpu time usage in seconds
     pub user_cpu_time: f64,

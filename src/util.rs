@@ -66,7 +66,7 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
     };
 
     let resource_usage = ResourceUsage {
-        memory_usage: rusage.ru_maxrss as usize * 1024,
+        memory_usage: rusage.ru_maxrss as u64 * 1024,
         user_cpu_time: rusage.ru_utime.tv_usec as f64 / 1_000_000.0 + rusage.ru_utime.tv_sec as f64,
         system_cpu_time: rusage.ru_stime.tv_usec as f64 / 1_000_000.0
             + rusage.ru_stime.tv_sec as f64,
