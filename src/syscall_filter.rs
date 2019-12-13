@@ -8,8 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// System call filter action
-#[allow(dead_code)]
-#[derive(Debug, Clone, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum SyscallFilterAction {
     /// Allow all system calls
     Allow,

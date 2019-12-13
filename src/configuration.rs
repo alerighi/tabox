@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 /// Describes a mountpoint inside the sandbox
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DirectoryMount {
     /// Where to mount the directory inside the sandbox.
     pub target: PathBuf,

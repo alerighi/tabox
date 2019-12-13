@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Struct that contains the information about resource usage of the process
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct ResourceUsage {
     /// Memory usage in bytes
     pub memory_usage: u64,
@@ -44,7 +44,7 @@ impl ExitStatus {
 }
 
 /// struct that represents the execution result of a sandbox
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SandboxExecutionResult {
     /// Exit status of the process
     pub status: ExitStatus,
