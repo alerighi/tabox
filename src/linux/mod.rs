@@ -162,20 +162,11 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> {
         command.stderr(Stdio::from(File::create(stderr)?));
     }
 
-    let config = config.clone();
-    let sandbox_path = sandbox_path.to_owned();
-
-    unsafe {
-        // Execute right before exec()
-        command.pre_exec(move || {
-            filesystem::create(&config, &sandbox_path).expect("Error creating filesystem");
-            setup_thread_affinity(&config).expect("Error setting thread affinity");
-            enter_chroot(&config, &sandbox_path).expect("Error entering in chroot");
-            setup_resource_limits(&config).expect("Error setting up resource limits");
-            setup_syscall_filter(&config).expect("Error setting up syscall filter");
-            Ok(())
-        });
-    }
+    filesystem::create(&config, &sandbox_path)?;
+    setup_thread_affinity(&config)?;
+    enter_chroot(&config, &sandbox_path)?;
+    setup_resource_limits(&config)?;
+    setup_syscall_filter(&config)?;
 
     // This can only return Err... nice!
     Err(failure::Error::from(command.exec()))

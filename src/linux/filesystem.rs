@@ -100,7 +100,11 @@ fn mount_dir(dir: &DirectoryMount, sandbox_dir: &Path) -> Result<()> {
             None as Option<&str>,
             &target,
             None as Option<&str>,
-            MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | MsFlags::MS_BIND,
+            MsFlags::MS_REMOUNT
+                | MsFlags::MS_RDONLY
+                | MsFlags::MS_BIND
+                | MsFlags::MS_NOSUID
+                | MsFlags::MS_NODEV,
             None as Option<&str>,
         )?;
     }
