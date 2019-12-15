@@ -26,10 +26,10 @@ pub fn setup_resource_limits(config: &SandboxConfiguration) -> Result<()> {
     set_resource_limit(libc::RLIMIT_CORE, 0)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(target_env = "gnu")]
 type Resource = u32;
 
-#[cfg(target_os = "macos")]
+#[cfg(not(target_env = "gnu"))]
 type Resource = i32;
 
 /// Utility function to set a resource limit
