@@ -7,7 +7,7 @@ use crate::configuration::{DirectoryMount, SandboxConfiguration};
 use crate::Result;
 
 use nix::mount::{mount, MsFlags};
-use nix::sys::stat::{makedev, mknod, Mode, SFlag};
+use nix::sys::stat::{mknod, Mode, SFlag};
 use std::fs;
 use std::path::Path;
 
@@ -19,17 +19,16 @@ pub fn create(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> 
         sandbox_path,
         Some("tmpfs"),
         MsFlags::empty(),
-        Some("size=256M"),
+        Some("size=256M,mode=0755"),
     )?;
 
     // Create /dev
     let dev = sandbox_path.join("dev");
     fs::create_dir_all(&dev)?;
 
-    make_dev(&dev.join("null"), 1, 3)?;
-    make_dev(&dev.join("zero"), 1, 5)?;
-    make_dev(&dev.join("random"), 1, 8)?;
-    make_dev(&dev.join("urandom"), 1, 9)?;
+    for device in &["null", "zero", "random", "urandom"] {
+        mount_dev(&dev.join(device), device)?;
+    }
 
     // Mount /tmp and /dev/shm
     if config.mount_tmpfs {
@@ -63,7 +62,7 @@ pub fn create(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> 
 }
 
 /// Create a device
-fn make_dev(path: &Path, major: u64, minor: u64) -> nix::Result<()> {
+fn mount_dev(path: &Path, dev: &str) -> nix::Result<()> {
     mknod(
         path,
         SFlag::empty(),
@@ -73,7 +72,14 @@ fn make_dev(path: &Path, major: u64, minor: u64) -> nix::Result<()> {
             | Mode::S_IWGRP
             | Mode::S_IROTH
             | Mode::S_IWOTH,
-        makedev(major, minor),
+        0,
+    )?;
+    mount(
+        Some(&Path::new("/dev").join(dev)),
+        path,
+        None as Option<&str>,
+        MsFlags::MS_BIND,
+        None as Option<&str>,
     )
 }
 
