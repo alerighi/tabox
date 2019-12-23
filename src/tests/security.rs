@@ -12,13 +12,13 @@ use crate::syscall_filter::{SyscallFilter, SyscallFilterAction};
 fn test_seccomp_filter() {
     let program = r#"
        #include <unistd.h>
-       int main() { getuid(); return 0; }
+       int main() { getpid(); return 0; }
     "#;
 
     let mut filter = SyscallFilter::default();
     filter
         .default_action(SyscallFilterAction::Allow)
-        .add_rule("getuid", SyscallFilterAction::Kill);
+        .add_rule("getpid", SyscallFilterAction::Kill);
 
     let mut config = SandboxConfiguration::default();
     config.syscall_filter(filter);

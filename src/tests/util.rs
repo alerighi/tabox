@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str;
 
@@ -48,7 +48,6 @@ pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> Ex
 
     config
         .mount(PathBuf::from("/usr"), PathBuf::from("/usr"), false)
-        .mount(PathBuf::from("/lib64"), PathBuf::from("/lib64"), false)
         .mount(PathBuf::from("/lib"), PathBuf::from("/lib"), false)
         .mount(PathBuf::from("/bin"), PathBuf::from("/bin"), false)
         .mount(PathBuf::from("/etc"), PathBuf::from("/etc"), false)
@@ -59,6 +58,10 @@ pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> Ex
         .stdin(temp.path().join("stdin.txt"))
         .stdout(temp.path().join("stdout.txt"))
         .stderr(temp.path().join("stderr.txt"));
+
+    if Path::new("/lib64").exists() {
+        config.mount(PathBuf::from("/lib64"), PathBuf::from("/lib64"), false);
+    }
 
     let config = config.clone().build();
 

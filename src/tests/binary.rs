@@ -23,10 +23,14 @@ fn run_shell(command: &str) -> ExecutionResult {
     args.push("/usr");
     args.push("/bin");
     args.push("/sbin");
-    args.push("/lib64");
     args.push("/lib");
     args.push("/etc");
     args.push("/var");
+
+    if Path::new("/lib64").exists() {
+        args.push("/lib64");
+    }
+
     args.push("--mount-tmpfs");
     args.push("--working-directory");
     args.push("/tmp");

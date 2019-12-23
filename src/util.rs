@@ -35,8 +35,8 @@ type Resource = i32;
 /// Utility function to set a resource limit
 fn set_resource_limit(resource: Resource, limit: u64) -> Result<()> {
     let r_limit = libc::rlimit {
-        rlim_cur: limit,
-        rlim_max: limit,
+        rlim_cur: limit as libc::rlim_t,
+        rlim_max: limit as libc::rlim_t,
     };
 
     if unsafe { libc::setrlimit(resource, &r_limit) } < 0 {

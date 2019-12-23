@@ -13,7 +13,6 @@ license = "MPL-2.0"
 repository = "https://github.com/alerighi/tabox"
 homepage = "https://alerighi.github.io/tabox"
 documentation = "https://docs.rs/tabox"
-default-run = "tabox"
 
 [[bin]]
 name = "tabox"
