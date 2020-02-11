@@ -116,6 +116,7 @@ impl Sandbox for MacOSSandbox {
             },
             resource_usage: ResourceUsage {
                 wall_time_usage: (Instant::now() - self.start_time).as_secs_f64(),
+                memory_usage: resource_usage.memory_usage / 1024, // on macOS memory usage is in bytes!
                 ..resource_usage
             },
         })
