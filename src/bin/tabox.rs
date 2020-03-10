@@ -40,6 +40,15 @@ struct Args {
     env: Vec<String>,
 
     /// Mount paths inside the sandbox
+    ///
+    /// Syntax: --mount=local/path,sandbox/path,rw where only the first argument is required.
+    /// If only 2 arguments are supplied they follow this semantics:
+    ///
+    /// - --mount=local,rw (if the second is rw, the sandbox path is the same as the local one)
+    /// - --mount=local,sandbox (if the second is not rw, it is assumed to be ro)
+    ///
+    /// The only valid options for the last argument are: ro (read-only mount) or rw (read-write
+    /// mount). By default the mount is read-only.
     #[structopt(long = "mount")]
     mount: Vec<String>,
 
@@ -161,15 +170,21 @@ fn main() {
 
     for path in args.mount {
         let parts: Vec<&str> = path.split(',').collect();
-        if parts.len() > 2 {
-            panic!("Invalid path parameter");
-        }
-        let writable = if parts.len() == 2 {
-            parts[1] == "rw"
-        } else {
-            false
+        let (local, sandbox, writable) = match &parts[..] {
+            &[local] => (local, local, false),
+            &[local, "rw"] => (local, local, true),
+            &[local, sandbox] => (local, sandbox, false),
+            &[local, sandbox, "rw"] => (local, sandbox, true),
+            &[local, sandbox, "ro"] => (local, sandbox, false),
+            _ => panic!("Invalid mount point: {}", path),
         };
-        config.mount(PathBuf::from(parts[0]), PathBuf::from(parts[0]), writable);
+        debug!(
+            "Mount {} into {} ({})",
+            local,
+            sandbox,
+            if writable { "rw" } else { "ro" }
+        );
+        config.mount(PathBuf::from(local), PathBuf::from(sandbox), writable);
     }
 
     config.syscall_filter(SyscallFilter::build(
