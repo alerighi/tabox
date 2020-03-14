@@ -67,6 +67,12 @@ pub struct SandboxConfiguration {
 
     /// Set on which CPU core to run the sandbox
     pub cpu_core: Option<usize>,
+
+    /// UID of the user inside the sandbox
+    pub uid: usize,
+
+    /// GID of the user inside the sandbox
+    pub gid: usize,
 }
 
 impl Default for SandboxConfiguration {
@@ -86,6 +92,8 @@ impl Default for SandboxConfiguration {
             mount_tmpfs: false,
             wall_time_limit: None,
             cpu_core: None,
+            uid: 0,
+            gid: 0,
         }
     }
 }
@@ -185,6 +193,18 @@ impl SandboxConfiguration {
     /// Run the sandbox on the specified cpu core
     pub fn run_on_core(&mut self, value: usize) -> &mut Self {
         self.cpu_core = Some(value);
+        self
+    }
+
+    /// Set the UID of the user inside the sandbox
+    pub fn uid(&mut self, uid: usize) -> &mut Self {
+        self.uid = uid;
+        self
+    }
+
+    /// Set the GID of the user inside the sandbox
+    pub fn gid(&mut self, gid: usize) -> &mut Self {
+        self.gid = gid;
         self
     }
 }

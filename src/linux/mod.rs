@@ -89,8 +89,8 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     if child_pid == 0 {
         // Map current uid/gid to root/root inside the sandbox
         std::fs::write("/proc/self/setgroups", "deny")?;
-        std::fs::write("/proc/self/uid_map", format!("0 {} 1", uid.as_raw()))?;
-        std::fs::write("/proc/self/gid_map", format!("0 {} 1", gid.as_raw()))?;
+        std::fs::write("/proc/self/uid_map", format!("{} {} 1", config.uid, uid.as_raw()))?;
+        std::fs::write("/proc/self/gid_map", format!("{} {} 1", config.gid, gid.as_raw()))?;
 
         // When parent dies, I want to die too
         if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) < 0 } {
@@ -140,8 +140,6 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
 /// Child process
 fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> {
     assert_eq!(unistd::getpid().as_raw(), 1);
-    assert_eq!(unistd::getuid().as_raw(), 0);
-    assert_eq!(unistd::getgid().as_raw(), 0);
 
     let mut command = Command::new(&config.executable);
 

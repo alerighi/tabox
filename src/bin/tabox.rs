@@ -95,6 +95,14 @@ struct Args {
     /// Run on the specified cpu core
     #[structopt(long)]
     cpu_core: Option<usize>,
+
+    /// UID of the user inside the sandbox
+    #[structopt(long, default_value = "0")]
+    pub uid: usize,
+
+    /// GID of the user inside the sandbox
+    #[structopt(long, default_value = "0")]
+    pub gid: usize,
 }
 
 fn main() {
@@ -112,7 +120,9 @@ fn main() {
 
     config
         .executable(args.executable)
-        .mount_tmpfs(args.mount_tmpfs);
+        .mount_tmpfs(args.mount_tmpfs)
+        .uid(args.uid)
+        .gid(args.gid);
 
     if let Some(time_limit) = args.time_limit {
         config.time_limit(time_limit);
