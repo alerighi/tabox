@@ -32,6 +32,8 @@ libc = "0.2"
 tempdir = "0.3"
 nix = "0.16"
 failure = "0.1"
+signal-hook = "0.1"
+lazy_static = "1.4"
 
 # tabox binary dependencies
 structopt = { version = "0.3", optional = true }

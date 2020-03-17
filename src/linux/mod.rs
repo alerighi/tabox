@@ -20,10 +20,29 @@ use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::ptr::null;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+lazy_static! {
+    /// PID of the child process, will be used to kill the child when SIGTERM or SIGINT is received.
+    static ref CHILD_PID: Arc<AtomicI32> = Arc::new(AtomicI32::new(-1));
+}
+
+/// Handler of the SIGINT and SIGTERM signals. If the child PID is available a SIGKILL will be sent
+/// to that process.
+fn sigterm_handler() {
+    let child_pid = CHILD_PID.load(Ordering::SeqCst);
+    if child_pid > 0 {
+        match kill(Pid::from_raw(child_pid), Signal::SIGKILL) {
+            Ok(()) => info!("Killed child process {}", child_pid),
+            Err(e) => error!("Cannot kill {}: {:?}", child_pid, e)
+        }
+    } else {
+        warn!("Cannot stop the child since the pid is unknown");
+    }
+}
 
 pub struct LinuxSandbox {
     child_thread: JoinHandle<SandboxExecutionResult>,
@@ -32,6 +51,10 @@ pub struct LinuxSandbox {
 impl Sandbox for LinuxSandbox {
     fn run(config: SandboxConfiguration) -> Result<Self> {
         trace!("Run LinuxSandbox with config {:?}", config);
+
+        // Register a signal handler that kills the child
+        unsafe{ signal_hook::register(signal_hook::SIGTERM, sigterm_handler) }?;
+        unsafe{ signal_hook::register(signal_hook::SIGINT, sigterm_handler) }?;
 
         // Start a child process to setup the sandbox
         let handle = thread::Builder::new()
@@ -100,6 +123,9 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
         // Start child process
         child(&config, sandbox_path)?;
     }
+
+    // Store the PID of the child process for letting the signal handler kill the child
+    CHILD_PID.store(child_pid, Ordering::SeqCst);
 
     let start_time = Instant::now();
 
