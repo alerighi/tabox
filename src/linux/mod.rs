@@ -37,7 +37,7 @@ fn sigterm_handler() {
     if child_pid > 0 {
         match kill(Pid::from_raw(child_pid), Signal::SIGKILL) {
             Ok(()) => info!("Killed child process {}", child_pid),
-            Err(e) => error!("Cannot kill {}: {:?}", child_pid, e)
+            Err(e) => error!("Cannot kill {}: {:?}", child_pid, e),
         }
     } else {
         warn!("Cannot stop the child since the pid is unknown");
@@ -53,8 +53,8 @@ impl Sandbox for LinuxSandbox {
         trace!("Run LinuxSandbox with config {:?}", config);
 
         // Register a signal handler that kills the child
-        unsafe{ signal_hook::register(signal_hook::SIGTERM, sigterm_handler) }?;
-        unsafe{ signal_hook::register(signal_hook::SIGINT, sigterm_handler) }?;
+        unsafe { signal_hook::register(signal_hook::SIGTERM, sigterm_handler) }?;
+        unsafe { signal_hook::register(signal_hook::SIGINT, sigterm_handler) }?;
 
         // Start a child process to setup the sandbox
         let handle = thread::Builder::new()
@@ -112,8 +112,14 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     if child_pid == 0 {
         // Map current uid/gid to root/root inside the sandbox
         std::fs::write("/proc/self/setgroups", "deny")?;
-        std::fs::write("/proc/self/uid_map", format!("{} {} 1", config.uid, uid.as_raw()))?;
-        std::fs::write("/proc/self/gid_map", format!("{} {} 1", config.gid, gid.as_raw()))?;
+        std::fs::write(
+            "/proc/self/uid_map",
+            format!("{} {} 1", config.uid, uid.as_raw()),
+        )?;
+        std::fs::write(
+            "/proc/self/gid_map",
+            format!("{} {} 1", config.gid, gid.as_raw()),
+        )?;
 
         // When parent dies, I want to die too
         if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) < 0 } {
