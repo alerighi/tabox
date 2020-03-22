@@ -75,3 +75,33 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
 
     Ok((status, resource_usage))
 }
+
+#[cfg(unix)]
+mod unix {
+    use std::os::raw::c_char;
+
+    extern "C" {
+        /// http://man7.org/linux/man-pages/man3/strsignal.3.html
+        pub fn strsignal(signal: i32) -> *mut c_char;
+    }
+}
+
+/// Returns a string with the text representation of the signal, `None` if it's not available.
+pub fn strsignal(signal: i32) -> Option<String> {
+    #[cfg(unix)]
+    {
+        use nix::NixPath;
+        unsafe {
+            let cstr = std::ffi::CStr::from_ptr(unix::strsignal(signal));
+            if cstr.is_empty() {
+                None
+            } else {
+                Some(cstr.to_string_lossy().to_string())
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
