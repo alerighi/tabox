@@ -5,6 +5,7 @@
 
 //! This module contains types for the result of an execution
 
+use crate::util::strsignal;
 use serde::{Deserialize, Serialize};
 
 /// Struct that contains the information about resource usage of the process
@@ -51,4 +52,31 @@ pub struct SandboxExecutionResult {
 
     /// Information about the resource usage of the process
     pub resource_usage: ResourceUsage,
+}
+
+impl ExitStatus {
+    /// Return the name of the signal, if the status is `ExitStatus::Signal`, otherwise `None` is
+    /// returned.
+    /// If the signal name is not available, `None` is returned.
+    pub fn signal_name(&self) -> Option<String> {
+        match self {
+            ExitStatus::Signal(signal) => strsignal(*signal),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_signal_name() {
+        assert_eq!(
+            Some("Segmentation fault".into()),
+            ExitStatus::Signal(11).signal_name()
+        );
+        assert!(ExitStatus::Killed.signal_name().is_none());
+        assert!(ExitStatus::ExitCode(0).signal_name().is_none());
+    }
 }
