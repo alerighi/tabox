@@ -29,8 +29,11 @@ pub struct SandboxConfiguration {
     /// Time limit for the execution in seconds
     pub time_limit: Option<u64>,
 
-    /// Memory limit fot the execution in bytes
+    /// Memory limit for the execution in bytes
     pub memory_limit: Option<u64>,
+
+    /// Stack limit for the execution in bytes
+    pub stack_limit: Option<u64>,
 
     /// Absolute path of the executable
     pub executable: PathBuf,
@@ -80,6 +83,7 @@ impl Default for SandboxConfiguration {
         SandboxConfiguration {
             time_limit: None,
             memory_limit: None,
+            stack_limit: None,
             executable: PathBuf::from("/bin/sh"),
             args: vec![],
             env: vec![],
@@ -113,6 +117,12 @@ impl SandboxConfiguration {
     /// Set the memory limit, in **bytes**
     pub fn memory_limit(&mut self, memory_limit: u64) -> &mut Self {
         self.memory_limit = Some(memory_limit);
+        self
+    }
+
+    /// Set the stack limit, in **bytes**
+    pub fn stack_limit(&mut self, stack_limit: u64) -> &mut Self {
+        self.stack_limit = Some(stack_limit);
         self
     }
 
