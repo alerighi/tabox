@@ -58,7 +58,9 @@ int main() {
 #[test]
 fn test_stack_limit_ok() {
     let mut config = SandboxConfiguration::default();
-    config.memory_limit(100 * 1_000_000).stack_limit(100 * 1_000_000);
+    config
+        .memory_limit(100 * 1_000_000)
+        .stack_limit(100 * 1_000_000);
 
     let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
 
@@ -80,7 +82,9 @@ fn test_stack_limit_default() {
 #[test]
 fn test_stack_limit_exceeded() {
     let mut config = SandboxConfiguration::default();
-    config.memory_limit(60 * 1_000_000).stack_limit(60 * 1_000_000);
+    config
+        .memory_limit(60 * 1_000_000)
+        .stack_limit(60 * 1_000_000);
 
     let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
 

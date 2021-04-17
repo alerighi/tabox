@@ -40,15 +40,35 @@ type Resource = i32;
 
 /// Utility function to set a resource limit
 fn set_resource_limit(resource: Resource, limit: u64) -> Result<()> {
-    let r_limit = libc::rlimit {
-        rlim_cur: limit as libc::rlim_t,
-        rlim_max: limit as libc::rlim_t,
-    };
+    unsafe {
+        let rlim = limit as libc::rlim_t;
+        let mut current_limit: libc::rlimit = std::mem::zeroed();
 
-    if unsafe { libc::setrlimit(resource, &r_limit) } < 0 {
-        Err(failure::err_msg("Error calling setrlimit()"))
-    } else {
-        Ok(())
+        let code = libc::getrlimit(resource, &mut current_limit);
+        if code < 0 {
+            panic!("getrlimit() error: {}", code);
+        }
+
+        let new_limit = libc::rlimit {
+            // avoid increasing over the hard limit. You need to be superuser for that!
+            rlim_cur: if rlim < current_limit.rlim_max {
+                rlim
+            } else {
+                current_limit.rlim_max
+            },
+            rlim_max: if rlim < current_limit.rlim_max {
+                rlim
+            } else {
+                current_limit.rlim_max
+            },
+        };
+
+        let code = libc::setrlimit(resource, &new_limit);
+        if code < 0 {
+            Err(failure::err_msg("Error calling setrlimit()"))
+        } else {
+            Ok(())
+        }
     }
 }
 

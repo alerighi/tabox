@@ -14,6 +14,9 @@ fn run_program(args: Vec<&str>) -> Output {
 
 /// Run a command in bash
 fn run_shell(command: &str) -> ExecutionResult {
+    let stderr_dir = tempdir::TempDir::new("temp").unwrap();
+    let stderr_file = stderr_dir.path().join("stderr.txt");
+
     let mut args = Vec::new();
     args.push("--json");
     args.push("--allow-insecure");
@@ -35,6 +38,8 @@ fn run_shell(command: &str) -> ExecutionResult {
     args.push("--working-directory");
     args.push("/tmp");
     args.push("--allow-multiprocess");
+    args.push("--stderr");
+    args.push(stderr_file.to_str().unwrap());
     args.push("--");
     args.push("/bin/bash");
     args.push("-c");
@@ -44,15 +49,17 @@ fn run_shell(command: &str) -> ExecutionResult {
     assert!(output.status.success());
 
     let stdout = std::str::from_utf8(&output.stdout).unwrap();
-    let stderr = std::str::from_utf8(&output.stderr).unwrap();
+    let stderr = std::fs::read_to_string(&stderr_file).unwrap_or_default();
+    let result = std::str::from_utf8(&output.stderr).unwrap();
 
     eprintln!("stdout = {}", stdout);
     eprintln!("stderr = {}", stderr);
+    eprintln!("result = {}", result);
 
     ExecutionResult {
         stdout: stdout.to_owned(),
         stderr: stderr.to_owned(),
-        result: serde_json::from_str(stderr).unwrap(),
+        result: serde_json::from_str(result).unwrap(),
     }
 }
 
@@ -67,7 +74,7 @@ fn test_echo() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_ping() {
-    let output = run_shell("ping 8.8.8.8 2>&1");
+    let output = run_shell("ping 8.8.8.8");
     assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(2));
 }
@@ -76,7 +83,7 @@ fn test_ping() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_curl() {
-    let output = run_shell("curl 8.8.8.8 2>&1");
+    let output = run_shell("curl 8.8.8.8");
     assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(7));
 }
@@ -85,6 +92,10 @@ fn test_curl() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_chmod() {
-    let output = run_shell("bash -c 'touch file; chmod 777 file' 2>&1");
+    let output = run_shell("touch file; chmod 777 file");
     assert!(!output.result.status.success());
+    assert_eq!(
+        output.result.status.signal_name().unwrap(),
+        "Bad system call"
+    );
 }
