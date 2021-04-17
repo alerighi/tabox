@@ -18,6 +18,12 @@ pub fn setup_resource_limits(config: &SandboxConfiguration) -> Result<()> {
         set_resource_limit(libc::RLIMIT_AS, memory_limit)?;
     }
 
+    if let Some(stack_limit) = config.stack_limit {
+        set_resource_limit(libc::RLIMIT_STACK, stack_limit)?;
+    } else {
+        set_resource_limit(libc::RLIMIT_STACK, libc::RLIM_INFINITY)?;
+    }
+
     if let Some(time_limit) = config.time_limit {
         set_resource_limit(libc::RLIMIT_CPU, time_limit)?;
     }

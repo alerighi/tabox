@@ -38,6 +38,65 @@ fn test_memory_limit_exceeded() {
     assert_eq!(result.result.status, ExitStatus::Signal(11));
 }
 
+const STACK_LIMIT_TEST_SRC: &str = r#"
+// each call consumes ~8KiB
+int f(int n) {
+    if (n == 0) return 123;
+    char data[8*1024];
+    int x = f(n - 1);
+    for (int i = 0; i < 8*1024; i++) {
+        data[i] = (i + x) & 0xff;
+    }
+    return data[123] + x;
+}
+int main() {
+    // ~10*1024*8KiB = ~80MiB
+    f(10*1024);
+}
+"#;
+
+#[test]
+fn test_stack_limit_ok() {
+    let mut config = SandboxConfiguration::default();
+    config.memory_limit(100 * 1_000_000).stack_limit(100 * 1_000_000);
+
+    let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
+
+    assert!(result.result.resource_usage.memory_usage > 80_000_000);
+    assert!(result.result.status.success());
+}
+
+#[test]
+fn test_stack_limit_default() {
+    let mut config = SandboxConfiguration::default();
+    config.memory_limit(100 * 1_000_000);
+
+    let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
+
+    assert!(result.result.resource_usage.memory_usage > 80_000_000);
+    assert!(result.result.status.success());
+}
+
+#[test]
+fn test_stack_limit_exceeded() {
+    let mut config = SandboxConfiguration::default();
+    config.memory_limit(60 * 1_000_000).stack_limit(60 * 1_000_000);
+
+    let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::Signal(11));
+}
+
+#[test]
+fn test_stack_limit_exceeded_default() {
+    let mut config = SandboxConfiguration::default();
+    config.memory_limit(60 * 1_000_000);
+
+    let result = exec(STACK_LIMIT_TEST_SRC, &mut config, "");
+
+    assert_eq!(result.result.status, ExitStatus::Signal(11));
+}
+
 #[test]
 fn test_time_limit_exceeded() {
     let program = r#"
