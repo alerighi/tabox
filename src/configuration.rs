@@ -76,6 +76,9 @@ pub struct SandboxConfiguration {
 
     /// GID of the user inside the sandbox
     pub gid: usize,
+
+    /// Mount /proc
+    pub mount_proc: bool,
 }
 
 impl Default for SandboxConfiguration {
@@ -98,6 +101,7 @@ impl Default for SandboxConfiguration {
             cpu_core: None,
             uid: 0,
             gid: 0,
+            mount_proc: false,
         }
     }
 }
@@ -215,6 +219,12 @@ impl SandboxConfiguration {
     /// Set the GID of the user inside the sandbox
     pub fn gid(&mut self, gid: usize) -> &mut Self {
         self.gid = gid;
+        self
+    }
+
+    /// Set mount /proc
+    pub fn mount_proc(&mut self, mount_proc: bool) -> &mut Self {
+        self.mount_proc = mount_proc;
         self
     }
 }

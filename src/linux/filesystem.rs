@@ -45,6 +45,11 @@ pub fn create(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> 
         }
     }
 
+    if config.mount_proc {
+        fs::create_dir_all(sandbox_path.join("proc"))?;
+        mount(Some("proc"), &sandbox_path.join("proc"), Some("proc"), MsFlags::empty(), Some("none"))?;
+    }
+
     // bind mount the readable directories into the sandbox
     for dir in &config.mount_paths {
         mount_dir(dir, sandbox_path)?;

@@ -103,6 +103,10 @@ struct Args {
     /// GID of the user inside the sandbox
     #[structopt(long, default_value = "0")]
     pub gid: usize,
+
+    /// Mount /proc
+    #[structopt(long)]
+    pub mount_proc: bool,
 }
 
 fn main() {
@@ -122,7 +126,8 @@ fn main() {
         .executable(args.executable)
         .mount_tmpfs(args.mount_tmpfs)
         .uid(args.uid)
-        .gid(args.gid);
+        .gid(args.gid)
+        .mount_proc(args.mount_proc);
 
     if let Some(time_limit) = args.time_limit {
         config.time_limit(time_limit);
