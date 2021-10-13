@@ -84,7 +84,6 @@ impl Sandbox for LinuxSandbox {
         true
     }
 }
-
 fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     let tempdir = tempdir::TempDir::new("tabox").context("Failed to create sandbox tempdir")?;
     let sandbox_path = tempdir.path();
@@ -99,6 +98,27 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
         uid,
         gid
     );
+
+    enum ErrorMessage {
+        NoError,
+        Error(usize, [char; 1024]),
+    }
+
+    // Allocate some memory that the forked process can use to write the error. This memory is
+    // page-aligned, which is hopefully enough for ErrorMessage.
+    let shared = unsafe {
+        std::mem::transmute(libc::mmap(
+            std::ptr::null_mut(),
+            std::mem::size_of::<ErrorMessage>(),
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_ANONYMOUS | libc::MAP_SHARED,
+            0,
+            0,
+        ))
+    };
+    // Cleanup the shared memory: by default there is no error (we cannot set it after because the
+    // child process execs and this memory will be unreachable).
+    unsafe { std::ptr::write(shared, ErrorMessage::NoError) };
 
     // Start child in an unshared environment
     let child_pid = unsafe {
@@ -120,13 +140,22 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     }
 
     if child_pid == 0 {
-        // FIXME: this is pretty broken. This function is executed inside a thread (Sandbox watcher)
-        //        which then "forks" (using SYS_clone). This child may still fail in many ways (fail
-        //        to setup the sandbox, fail to exec the binary, ...) but when it fails it has no
-        //        way of notifying the parent that it failed. This `expect` let the forked thread
-        //        panic, printing the error to the console, but the parent thread is not notified
-        //        and thinks everything went well.
-        child(&config, sandbox_path, uid, gid).expect("Failed to start child process");
+        if let Err(err) = child(&config, sandbox_path, uid, gid) {
+            error!("Child failed: {:?}", err);
+
+            // prepare a buffer where to write the error message
+            let message = format!("{:?}", err);
+            let message = message.chars().take(1024).collect::<Vec<_>>();
+            let mut buffer = ['\0'; 1024];
+            buffer[..message.len()].copy_from_slice(&message);
+
+            // Write the error message to the shared memory. This is safe since the parent will not
+            // read from it until this process has completely exited.
+            let error = ErrorMessage::Error(message.len(), buffer);
+            unsafe { std::ptr::write(shared, error) };
+        } else {
+            unreachable!("The child process must exec");
+        }
     }
 
     // Store the PID of the child process for letting the signal handler kill the child
@@ -143,6 +172,13 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
 
     // Wait child for completion
     let (status, resource_usage) = wait(child_pid).context("Failed to wait for child process")?;
+
+    // Read from shared memory if there was an error with the sandbox. At this point the child
+    // process has for sure exited, so it's safe to read.
+    if let ErrorMessage::Error(len, error) = unsafe { std::ptr::read(shared) } {
+        let message = error.iter().take(len).collect::<String>();
+        bail!("{}", message);
+    }
 
     Ok(SandboxExecutionResult {
         status: if killed.load(Ordering::SeqCst) {
