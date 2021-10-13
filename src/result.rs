@@ -5,8 +5,9 @@
 
 //! This module contains types for the result of an execution
 
-use crate::util::strsignal;
 use serde::{Deserialize, Serialize};
+
+use crate::util::strsignal;
 
 /// Struct that contains the information about resource usage of the process
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

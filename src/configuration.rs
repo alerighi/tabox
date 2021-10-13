@@ -5,9 +5,11 @@
 
 //! Module that contains the configuration of the sandbox
 
-use crate::syscall_filter::SyscallFilter;
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+
+use crate::syscall_filter::SyscallFilter;
 
 /// Describes a mountpoint inside the sandbox
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

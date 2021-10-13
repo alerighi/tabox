@@ -14,9 +14,9 @@
 //! - measure and limit the resource (cpu time, memory) usage of the process
 
 #[macro_use]
-extern crate log;
-#[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
 
 pub mod configuration;
 pub mod result;
@@ -44,7 +44,7 @@ compile_error!("TAbox not supported on your operating system");
 mod tests;
 
 /// Convenience result type
-pub type Result<T> = std::result::Result<T, failure::Error>;
+pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 /// A trait that represents a Sandbox
 pub trait Sandbox {

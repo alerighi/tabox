@@ -1,3 +1,11 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use anyhow::{bail, Context};
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
+
 use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage};
 use crate::Result;
@@ -15,21 +23,23 @@ extern "C" {
 /// Setup the resource limits
 pub fn setup_resource_limits(config: &SandboxConfiguration) -> Result<()> {
     if let Some(memory_limit) = config.memory_limit {
-        set_resource_limit(libc::RLIMIT_AS, memory_limit)?;
+        set_resource_limit(libc::RLIMIT_AS, memory_limit).context("Failed to set RLIMIT_AS")?;
     }
 
     if let Some(stack_limit) = config.stack_limit {
-        set_resource_limit(libc::RLIMIT_STACK, stack_limit)?;
+        set_resource_limit(libc::RLIMIT_STACK, stack_limit)
+            .context("Failed to set RLIMIT_STACK")?;
     } else {
-        set_resource_limit(libc::RLIMIT_STACK, libc::RLIM_INFINITY)?;
+        set_resource_limit(libc::RLIMIT_STACK, libc::RLIM_INFINITY)
+            .context("Failed to set RLIMIT_STACK")?;
     }
 
     if let Some(time_limit) = config.time_limit {
-        set_resource_limit(libc::RLIMIT_CPU, time_limit)?;
+        set_resource_limit(libc::RLIMIT_CPU, time_limit).context("Failed to set RLIMIT_CPU")?;
     }
 
     // No core dumps
-    set_resource_limit(libc::RLIMIT_CORE, 0)
+    set_resource_limit(libc::RLIMIT_CORE, 0).context("Failed to set RLIMIT_CORE")
 }
 
 #[cfg(target_env = "gnu")]
@@ -65,7 +75,7 @@ fn set_resource_limit(resource: Resource, limit: u64) -> Result<()> {
 
         let code = libc::setrlimit(resource, &new_limit);
         if code < 0 {
-            Err(failure::err_msg("Error calling setrlimit()"))
+            bail!("Error calling setrlimit(): {}", strerror());
         } else {
             Ok(())
         }
@@ -78,7 +88,7 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
     let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
 
     if unsafe { wait4(pid, &mut status, 0, &mut rusage) } != pid {
-        return Err(failure::err_msg("Error waiting for child completion"));
+        bail!("Error waiting for child completion: {}", strerror());
     };
 
     let status = unsafe {
@@ -87,7 +97,7 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
         } else if libc::WIFSIGNALED(status) {
             ExitStatus::Signal(libc::WTERMSIG(status))
         } else {
-            return Err(failure::err_msg("Child terminated with unknown status"));
+            bail!("Child terminated with unknown status");
         }
     };
 
@@ -100,6 +110,31 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
     };
 
     Ok((status, resource_usage))
+}
+
+pub fn start_wall_time_watcher(limit: u64, child_pid: i32, killed: Arc<AtomicBool>) -> Result<()> {
+    std::thread::Builder::new()
+        .name("Wall time watcher".into())
+        .spawn(move || {
+            std::thread::sleep(Duration::new(limit, 0));
+
+            // Kill process if it didn't terminate in wall limit
+            kill(Pid::from_raw(child_pid), Signal::SIGKILL)
+                .expect("Error killing child due to wall limit exceeded");
+
+            killed.store(true, Ordering::SeqCst);
+        })
+        .context("Failed to spawn Wall time watcher thread")?;
+    Ok(())
+}
+
+/// Read the error from errno and using `libc::strerror` obtain a string representation of it.
+pub fn strerror() -> String {
+    unsafe {
+        let err = libc::strerror(nix::errno::errno());
+        let str = std::ffi::CStr::from_ptr(std::mem::transmute(err));
+        str.to_str().unwrap().into()
+    }
 }
 
 #[cfg(unix)]

@@ -3,9 +3,13 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::syscall_filter::SyscallFilterAction;
-use crate::Result;
 use std::ffi::CString;
+
+use anyhow::bail;
+
+use crate::syscall_filter::SyscallFilterAction;
+use crate::util::strerror;
+use crate::Result;
 
 impl SyscallFilterAction {
     /// Transform the Action to the correct seccomp parameter
@@ -28,7 +32,7 @@ impl SeccompFilter {
     pub fn new(default_action: SyscallFilterAction) -> Result<SeccompFilter> {
         let ctx = unsafe { seccomp_sys::seccomp_init(default_action.to_seccomp_param()) };
         if ctx.is_null() {
-            Err(failure::err_msg("seccomp_init() error"))
+            bail!("seccomp_init() error: {}", strerror())
         } else {
             Ok(SeccompFilter { ctx })
         }
@@ -41,15 +45,13 @@ impl SeccompFilter {
         let syscall_num =
             unsafe { seccomp_sys::seccomp_syscall_resolve_name(syscall_name.as_ptr()) };
         if syscall_num < 0 {
-            return Err(failure::err_msg(
-                "Error calling seccomp_syscall_resolve_name",
-            ));
+            bail!("Error calling seccomp_syscall_resolve_name: {}", strerror());
         }
         if unsafe {
             seccomp_sys::seccomp_rule_add(self.ctx, action.to_seccomp_param(), syscall_num, 0)
         } < 0
         {
-            Err(failure::err_msg("Error calling seccomp_rule_add()"))
+            bail!("Error calling seccomp_rule_add(): {}", strerror())
         } else {
             Ok(())
         }
@@ -58,7 +60,7 @@ impl SeccompFilter {
     /// Load the specified filter
     pub fn load(&self) -> Result<()> {
         if unsafe { seccomp_sys::seccomp_load(self.ctx) } < 0 {
-            Err(failure::err_msg("Error calling seccomp_load()"))
+            bail!("Error calling seccomp_load(): {}", strerror())
         } else {
             Ok(())
         }

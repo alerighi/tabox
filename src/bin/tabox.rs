@@ -6,11 +6,15 @@
 #[macro_use]
 extern crate log;
 
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use anyhow::{bail, Context};
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
+
 use tabox::configuration::SandboxConfiguration;
 use tabox::syscall_filter::SyscallFilter;
+use tabox::Result;
 use tabox::{Sandbox, SandboxImplementation};
 
 /// Command line arguments of the program
@@ -109,7 +113,7 @@ struct Args {
     pub mount_proc: bool,
 }
 
-fn main() {
+fn main() -> Result<()> {
     env_logger::init();
 
     let args = Args::from_args();
@@ -117,7 +121,7 @@ fn main() {
     if !SandboxImplementation::is_secure() && !args.allow_insecure {
         eprintln!("Your platform doesn't support a secure sandbox!");
         eprintln!("Run with --allow-insecure if you really want to execute it anyway");
-        return;
+        std::process::exit(1);
     }
 
     let mut config = SandboxConfiguration::default();
@@ -166,32 +170,31 @@ fn main() {
     }
 
     for el in args.env {
-        let parts: Vec<&str> = el.split('=').collect();
+        let parts: Vec<&str> = el.splitn(2, '=').collect();
         match parts.len() {
             1 => {
-                config.env(
-                    parts[0],
-                    std::env::var(parts[0]).unwrap_or_else(|_| {
-                        panic!("Variable {} not present in the environment", parts[0])
-                    }),
-                );
+                let name = parts[0];
+                let value = std::env::var(name).with_context(|| {
+                    format!("Variable {} not present in the environment", parts[0])
+                })?;
+                config.env(name, value);
             }
             2 => {
                 config.env(parts[0], parts[1]);
             }
-            _ => panic!("Invalid env argument"),
+            _ => bail!("Invalid env argument: {}", el),
         }
     }
 
     for path in args.mount {
         let parts: Vec<&str> = path.split(',').collect();
-        let (local, sandbox, writable) = match &parts[..] {
-            &[local] => (local, local, false),
-            &[local, "rw"] => (local, local, true),
-            &[local, sandbox] => (local, sandbox, false),
-            &[local, sandbox, "rw"] => (local, sandbox, true),
-            &[local, sandbox, "ro"] => (local, sandbox, false),
-            _ => panic!("Invalid mount point: {}", path),
+        let (local, sandbox, writable) = match parts[..] {
+            [local] => (local, local, false),
+            [local, "rw"] => (local, local, true),
+            [local, sandbox] => (local, sandbox, false),
+            [local, sandbox, "rw"] => (local, sandbox, true),
+            [local, sandbox, "ro"] => (local, sandbox, false),
+            _ => bail!("Invalid mount point: {}", path),
         };
         debug!(
             "Mount {} into {} ({})",
@@ -209,12 +212,14 @@ fn main() {
 
     trace!("Sandbox config {:#?}", config);
 
-    let sandbox = SandboxImplementation::run(config.build()).expect("Error creating sandbox");
-    let result = sandbox.wait().expect("Error waiting for sandbox result");
+    let sandbox =
+        SandboxImplementation::run(config.build()).context("Error running the sandbox")?;
+    let result = sandbox.wait().context("Error waiting for sandbox result")?;
 
     if args.json {
         eprintln!("{}", serde_json::to_string(&result).unwrap());
     } else {
         eprintln!("{:#?}", result);
     }
+    Ok(())
 }
