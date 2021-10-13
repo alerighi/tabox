@@ -13,6 +13,7 @@ fn run_program(args: Vec<&str>) -> Output {
 }
 
 /// Run a command in bash
+#[allow(clippy::vec_init_then_push)]
 fn run_shell(command: &str) -> ExecutionResult {
     let stderr_dir = tempdir::TempDir::new("temp").unwrap();
     let stderr_file = stderr_dir.path().join("stderr.txt");
@@ -58,7 +59,7 @@ fn run_shell(command: &str) -> ExecutionResult {
 
     ExecutionResult {
         stdout: stdout.to_owned(),
-        stderr: stderr.to_owned(),
+        stderr,
         result: serde_json::from_str(result).unwrap(),
     }
 }

@@ -99,6 +99,7 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
         gid
     );
 
+    #[allow(clippy::large_enum_variant)]
     enum ErrorMessage {
         NoError,
         Error(usize, [char; 1024]),
@@ -241,11 +242,11 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path, uid: Uid, gid: Gid)
         command.stderr(stderr);
     }
 
-    filesystem::create(&config, &sandbox_path).context("Failed to create sandbox filesystem")?;
-    setup_thread_affinity(&config).context("Failed to setup thread affinity")?;
-    enter_chroot(&config, &sandbox_path).context("Failed to enter chroot")?;
-    setup_resource_limits(&config).context("Failed to setup rlimits")?;
-    setup_syscall_filter(&config).context("Failed to setup syscall filter")?;
+    filesystem::create(config, sandbox_path).context("Failed to create sandbox filesystem")?;
+    setup_thread_affinity(config).context("Failed to setup thread affinity")?;
+    enter_chroot(config, sandbox_path).context("Failed to enter chroot")?;
+    setup_resource_limits(config).context("Failed to setup rlimits")?;
+    setup_syscall_filter(config).context("Failed to setup syscall filter")?;
 
     // This can only return Err... nice!
     Err(command.exec()).context("Failed to exec child process")

@@ -188,12 +188,12 @@ fn main() -> Result<()> {
 
     for path in args.mount {
         let parts: Vec<&str> = path.split(',').collect();
-        let (local, sandbox, writable) = match &parts[..] {
-            &[local] => (local, local, false),
-            &[local, "rw"] => (local, local, true),
-            &[local, sandbox] => (local, sandbox, false),
-            &[local, sandbox, "rw"] => (local, sandbox, true),
-            &[local, sandbox, "ro"] => (local, sandbox, false),
+        let (local, sandbox, writable) = match parts[..] {
+            [local] => (local, local, false),
+            [local, "rw"] => (local, local, true),
+            [local, sandbox] => (local, sandbox, false),
+            [local, sandbox, "rw"] => (local, sandbox, true),
+            [local, sandbox, "ro"] => (local, sandbox, false),
             _ => bail!("Invalid mount point: {}", path),
         };
         debug!(
