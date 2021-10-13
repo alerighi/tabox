@@ -4,12 +4,6 @@
 // SPDX-License-Identifier: MPL-2.0
 //! This module contains the sandbox for MacOS
 
-use crate::configuration::SandboxConfiguration;
-use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::util::{setup_resource_limits, wait};
-use crate::{Result, Sandbox};
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::Pid;
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
@@ -17,6 +11,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use anyhow::Context;
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
+
+use crate::configuration::SandboxConfiguration;
+use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
+use crate::util::{setup_resource_limits, start_wall_time_watcher, wait};
+use crate::{Result, Sandbox};
 
 pub struct MacOSSandbox {
     child: Child,
@@ -44,20 +47,26 @@ impl Sandbox for MacOSSandbox {
             .envs(config.env)
             .current_dir(config.working_directory);
 
-        if let Some(stdin) = config.stdin {
-            command.stdin(Stdio::from(File::open(stdin)?));
+        if let Some(stdin) = &config.stdin {
+            let stdin = File::open(stdin)
+                .with_context(|| format!("Failed to open stdin file at {}", stdin.display()))?;
+            command.stdin(stdin);
         }
 
-        if let Some(stdout) = config.stdout {
-            command.stdout(Stdio::from(File::create(stdout)?));
+        if let Some(stdout) = &config.stdout {
+            let stdout = File::create(stdout)
+                .with_context(|| format!("Failed to open stdout file at {}", stdout.display()))?;
+            command.stdout(stdout);
         }
 
-        if let Some(stderr) = config.stderr {
-            command.stderr(Stdio::from(File::create(stderr)?));
+        if let Some(stderr) = &config.stderr {
+            let stderr = File::create(stderr)
+                .with_context(|| format!("Failed to open stderr file at {}", stderr.display()))?;
+            command.stderr(stderr);
         }
 
         // Spawn child
-        let child = command.spawn()?;
+        let child = command.spawn().context("Failed to spawn command")?;
 
         let killed = Arc::new(AtomicBool::new(false));
         let child_pid = child.id() as i32;
@@ -70,31 +79,19 @@ impl Sandbox for MacOSSandbox {
                     loop {
                         if get_macos_memory_usage(child_pid) > memory_limit {
                             // Kill process if memory limit exceeded.
-                            // Send SIGSEGV since it's the same that sends Linux.
+                            // Send SIGSEGV since it's the same that Linux sends.
                             kill(Pid::from_raw(child_pid), Signal::SIGSEGV)
                                 .expect("Error killing child due to memory limit exceeded");
                         }
 
                         thread::sleep(Duration::new(0, 1_000));
                     }
-                })?;
+                })
+                .context("Failed to start memory watcher thread")?;
         }
 
         if let Some(limit) = config.wall_time_limit {
-            let killed = killed.clone();
-
-            // This thread monitors the wall time of the process and kills it when the limit is exceeded
-            thread::Builder::new()
-                .name("TABox Wall time watcher".into())
-                .spawn(move || {
-                    thread::sleep(Duration::new(limit, 0));
-
-                    // Kill process if it didn't terminate in wall limit
-                    kill(Pid::from_raw(child_pid), Signal::SIGKILL)
-                        .expect("Error killing child due to wall limit exceeded");
-
-                    killed.store(true, Ordering::SeqCst);
-                })?;
+            start_wall_time_watcher(limit, child_pid, killed.clone());
         }
 
         Ok(MacOSSandbox {
@@ -106,7 +103,8 @@ impl Sandbox for MacOSSandbox {
 
     fn wait(self) -> Result<SandboxExecutionResult> {
         // Wait child for completion
-        let (status, resource_usage) = wait(self.child.id() as libc::pid_t)?;
+        let (status, resource_usage) =
+            wait(self.child.id() as libc::pid_t).context("Failed to wait")?;
 
         Ok(SandboxExecutionResult {
             status: if self.killed.load(Ordering::SeqCst) {
