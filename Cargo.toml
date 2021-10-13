@@ -31,7 +31,7 @@ errno = "0.2"
 libc = "0.2"
 tempdir = "0.3"
 nix = "0.16"
-failure = "0.1"
+anyhow = "1"
 signal-hook = "0.1"
 lazy_static = "1.4"
 

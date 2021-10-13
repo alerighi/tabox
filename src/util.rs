@@ -1,3 +1,5 @@
+use anyhow::bail;
+
 use crate::configuration::SandboxConfiguration;
 use crate::result::{ExitStatus, ResourceUsage};
 use crate::Result;
@@ -65,7 +67,7 @@ fn set_resource_limit(resource: Resource, limit: u64) -> Result<()> {
 
         let code = libc::setrlimit(resource, &new_limit);
         if code < 0 {
-            Err(failure::err_msg("Error calling setrlimit()"))
+            bail!("Error calling setrlimit()");
         } else {
             Ok(())
         }
@@ -78,7 +80,7 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
     let mut rusage: libc::rusage = unsafe { std::mem::zeroed() };
 
     if unsafe { wait4(pid, &mut status, 0, &mut rusage) } != pid {
-        return Err(failure::err_msg("Error waiting for child completion"));
+        bail!("Error waiting for child completion");
     };
 
     let status = unsafe {
@@ -87,7 +89,7 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
         } else if libc::WIFSIGNALED(status) {
             ExitStatus::Signal(libc::WTERMSIG(status))
         } else {
-            return Err(failure::err_msg("Child terminated with unknown status"));
+            bail!("Child terminated with unknown status");
         }
     };
 

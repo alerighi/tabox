@@ -5,25 +5,27 @@
 
 //! This module contains the sandbox for Linux
 
-mod filesystem;
-mod seccomp_filter;
-
-use crate::configuration::SandboxConfiguration;
-use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
-use crate::util::{setup_resource_limits, wait};
-use crate::{Result, Sandbox};
-
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::{self, Pid};
 use std::fs::File;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::ptr::null;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+use anyhow::{bail, Context};
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::{self, Pid};
+
+use crate::{Result, Sandbox};
+use crate::configuration::SandboxConfiguration;
+use crate::result::{ExitStatus, ResourceUsage, SandboxExecutionResult};
+use crate::util::{setup_resource_limits, wait};
+
+mod filesystem;
+mod seccomp_filter;
 
 lazy_static! {
     /// PID of the child process, will be used to kill the child when SIGTERM or SIGINT is received.
@@ -106,7 +108,7 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     } as libc::pid_t;
 
     if child_pid < 0 {
-        return Err(failure::err_msg("clone() error"));
+        bail!("clone() error");
     }
 
     if child_pid == 0 {
@@ -123,7 +125,7 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
 
         // When parent dies, I want to die too
         if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) < 0 } {
-            return Err(failure::err_msg("Error calling prctl()"));
+            bail!("Error calling prctl()");
         };
 
         // Start child process
@@ -199,7 +201,7 @@ fn child(config: &SandboxConfiguration, sandbox_path: &Path) -> Result<()> {
     setup_syscall_filter(&config)?;
 
     // This can only return Err... nice!
-    Err(failure::Error::from(command.exec()))
+    Err(command.exec()).context("Failed to exec")
 }
 
 /// Set cpu affinity
