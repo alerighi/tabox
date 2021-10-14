@@ -433,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "tabox"
-version = "0.1.15"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "core_affinity",
