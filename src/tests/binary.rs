@@ -67,7 +67,7 @@ fn run_shell(command: &str) -> ExecutionResult {
 /// Test running bash
 #[test]
 fn test_echo() {
-    let output = run_shell("echo -n Hello, world!");
+    let output = run_shell("exec echo -n Hello, world!");
     assert_eq!(output.stdout, "Hello, world!");
 }
 
@@ -75,7 +75,7 @@ fn test_echo() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_ping() {
-    let output = run_shell("ping 8.8.8.8");
+    let output = run_shell("exec ping 8.8.8.8");
     assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(2));
 }
@@ -84,7 +84,7 @@ fn test_ping() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_curl() {
-    let output = run_shell("curl 8.8.8.8");
+    let output = run_shell("exec curl 8.8.8.8");
     assert!(!output.result.status.success());
     assert_eq!(output.result.status, ExitStatus::ExitCode(7));
 }
@@ -93,7 +93,7 @@ fn test_curl() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_chmod() {
-    let output = run_shell("touch file; chmod 777 file");
+    let output = run_shell("touch file; exec chmod 777 file");
     assert!(!output.result.status.success());
     assert_eq!(
         output.result.status.signal_name().unwrap(),
