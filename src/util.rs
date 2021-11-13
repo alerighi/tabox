@@ -22,8 +22,12 @@ extern "C" {
 
 /// Setup the resource limits
 pub fn setup_resource_limits(config: &SandboxConfiguration) -> Result<()> {
-    if let Some(memory_limit) = config.memory_limit {
-        set_resource_limit(libc::RLIMIT_AS, memory_limit).context("Failed to set RLIMIT_AS")?;
+    // on macOS Montmery this seems to fail for no reason
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(memory_limit) = config.memory_limit {
+            set_resource_limit(libc::RLIMIT_AS, memory_limit).context("Failed to set RLIMIT_AS")?;
+        }
     }
 
     if let Some(stack_limit) = config.stack_limit {
