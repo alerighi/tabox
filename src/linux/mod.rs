@@ -121,26 +121,7 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
     // child process execs and this memory will be unreachable).
     unsafe { std::ptr::write(shared, ErrorMessage::NoError) };
 
-    // Start child in an unshared environment
-    let child_pid = unsafe {
-        libc::syscall(
-            libc::SYS_clone,
-            libc::CLONE_NEWIPC
-                | libc::CLONE_NEWNET
-                | libc::CLONE_NEWNS
-                | libc::CLONE_NEWPID
-                | libc::CLONE_NEWUSER
-                | libc::CLONE_NEWUTS
-                | libc::SIGCHLD,
-            null::<libc::c_void>(),
-        )
-    } as libc::pid_t;
-
-    if child_pid < 0 {
-        bail!("clone() error: {}", strerror());
-    }
-
-    if child_pid == 0 {
+    let child_pid = spawn_child(|| {
         if let Err(err) = child(&config, sandbox_path, uid, gid) {
             error!("Child failed: {:?}", err);
 
@@ -157,10 +138,8 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
         } else {
             unreachable!("The child process must exec");
         }
-
-        // make sure the child process exits
-        std::process::exit(1);
-    }
+    })
+    .context("Failed to spawn child process")?;
 
     // Store the PID of the child process for letting the signal handler kill the child
     CHILD_PID.store(child_pid, Ordering::SeqCst);
@@ -195,6 +174,38 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
             ..resource_usage
         },
     })
+}
+
+/// Spawn the child process inside of an unshared environment.
+///
+/// This makes sure the child process exits when it's done.
+fn spawn_child(child: impl FnOnce()) -> Result<libc::pid_t> {
+    let child_pid = unsafe {
+        libc::syscall(
+            libc::SYS_clone,
+            libc::CLONE_NEWIPC
+                | libc::CLONE_NEWNET
+                | libc::CLONE_NEWNS
+                | libc::CLONE_NEWPID
+                | libc::CLONE_NEWUSER
+                | libc::CLONE_NEWUTS
+                | libc::SIGCHLD,
+            null::<libc::c_void>(),
+        )
+    } as libc::pid_t;
+
+    if child_pid < 0 {
+        bail!("clone() error: {}", strerror());
+    }
+
+    if child_pid == 0 {
+        child();
+
+        // make sure the child process exits
+        std::process::exit(1);
+    }
+
+    Ok(child_pid)
 }
 
 /// Child process
