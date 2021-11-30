@@ -157,6 +157,9 @@ fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
         } else {
             unreachable!("The child process must exec");
         }
+
+        // make sure the child process exits
+        std::process::exit(1);
     }
 
     // Store the PID of the child process for letting the signal handler kill the child
