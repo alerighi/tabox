@@ -95,14 +95,12 @@ pub fn wait(pid: libc::pid_t) -> Result<(ExitStatus, ResourceUsage)> {
         bail!("Error waiting for child completion: {}", strerror());
     };
 
-    let status = unsafe {
-        if libc::WIFEXITED(status) {
-            ExitStatus::ExitCode(libc::WEXITSTATUS(status))
-        } else if libc::WIFSIGNALED(status) {
-            ExitStatus::Signal(libc::WTERMSIG(status))
-        } else {
-            bail!("Child terminated with unknown status");
-        }
+    let status = if libc::WIFEXITED(status) {
+        ExitStatus::ExitCode(libc::WEXITSTATUS(status))
+    } else if libc::WIFSIGNALED(status) {
+        ExitStatus::Signal(libc::WTERMSIG(status))
+    } else {
+        bail!("Child terminated with unknown status");
     };
 
     let resource_usage = ResourceUsage {
