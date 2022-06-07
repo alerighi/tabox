@@ -6,7 +6,7 @@
 
 use std::fs::File;
 use std::os::unix::process::CommandExt;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -91,7 +91,7 @@ impl Sandbox for MacOSSandbox {
         }
 
         if let Some(limit) = config.wall_time_limit {
-            start_wall_time_watcher(limit, child_pid, killed.clone());
+            start_wall_time_watcher(limit, child_pid, killed.clone())?;
         }
 
         Ok(MacOSSandbox {

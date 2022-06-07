@@ -56,6 +56,8 @@ int main() {
 "#;
 
 #[test]
+// macOS has a much lower stack limit than Linux (~8Mb and a maximum of 64)
+#[cfg(os = "linux")]
 fn test_stack_limit_ok() {
     let mut config = SandboxConfiguration::default();
     config
@@ -69,6 +71,8 @@ fn test_stack_limit_ok() {
 }
 
 #[test]
+// macOS has a much lower stack limit than Linux (~8Mb and a maximum of 64)
+#[cfg(os = "linux")]
 fn test_stack_limit_default() {
     let mut config = SandboxConfiguration::default();
     config.memory_limit(100 * 1_000_000);
@@ -125,7 +129,7 @@ fn test_time_limit_exceeded() {
 fn test_time_usage() {
     let program = r#"
        #include <time.h>
-       int main() { for (int t = time(NULL); t + 2 >= time(NULL); ); return 0; }
+       int main() { for (int t = time(NULL); t + 2 >= time(NULL); ) {} return 0; }
     "#;
 
     let mut config = SandboxConfiguration::default();

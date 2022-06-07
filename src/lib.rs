@@ -13,8 +13,11 @@
 //! - launch a process in a secure environment, where it cannot damage the existing machine
 //! - measure and limit the resource (cpu time, memory) usage of the process
 
+#[cfg(target_os = "linux")]
 #[macro_use]
 extern crate lazy_static;
+
+#[cfg(target_os = "linux")]
 #[macro_use]
 extern crate log;
 

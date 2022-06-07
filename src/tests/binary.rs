@@ -1,4 +1,6 @@
+#[cfg(target_os = "linux")]
 use crate::result::ExitStatus;
+
 use crate::tests::util::ExecutionResult;
 use std::path::Path;
 use std::process::{Command, Output};

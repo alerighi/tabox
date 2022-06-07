@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn test_signal_name() {
         assert_eq!(
-            Some("Segmentation fault".into()),
+            Some("Segmentation fault: 11".into()),
             ExitStatus::Signal(11).signal_name()
         );
         assert!(ExitStatus::Killed.signal_name().is_none());
