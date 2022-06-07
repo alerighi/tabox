@@ -73,6 +73,13 @@ mod tests {
 
     #[test]
     fn test_signal_name() {
+        // ...why?
+        #[cfg(target_os = "linux")]
+        assert_eq!(
+            Some("Segmentation fault".into()),
+            ExitStatus::Signal(11).signal_name()
+        );
+        #[cfg(target_os = "macos")]
         assert_eq!(
             Some("Segmentation fault: 11".into()),
             ExitStatus::Signal(11).signal_name()
