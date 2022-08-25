@@ -5,6 +5,7 @@
 
 //! Module that contains the configuration of the sandbox
 
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -41,10 +42,10 @@ pub struct SandboxConfiguration {
     pub executable: PathBuf,
 
     /// Arguments to pass to the executable
-    pub args: Vec<String>,
+    pub args: Vec<OsString>,
 
     /// Environment to pass to the sandbox
-    pub env: Vec<(String, String)>,
+    pub env: Vec<(OsString, OsString)>,
 
     /// Allowed paths inside the sandbox
     pub mount_paths: Vec<DirectoryMount>,
@@ -163,13 +164,17 @@ impl SandboxConfiguration {
     }
 
     /// Add an argument to the program
-    pub fn arg<S: Into<String>>(&mut self, arg: S) -> &mut Self {
+    pub fn arg<S: Into<OsString>>(&mut self, arg: S) -> &mut Self {
         self.args.push(arg.into());
         self
     }
 
     /// Add an argument to the environment
-    pub fn env<S: Into<String>, T: Into<String>>(&mut self, variable: S, value: T) -> &mut Self {
+    pub fn env<S: Into<OsString>, T: Into<OsString>>(
+        &mut self,
+        variable: S,
+        value: T,
+    ) -> &mut Self {
         self.env.push((variable.into(), value.into()));
         self
     }
