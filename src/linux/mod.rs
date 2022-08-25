@@ -55,9 +55,9 @@ impl Sandbox for LinuxSandbox {
         trace!("Run LinuxSandbox with config {:?}", config);
 
         // Register a signal handler that kills the child
-        unsafe { signal_hook::register(signal_hook::SIGTERM, sigterm_handler) }
+        unsafe { signal_hook::low_level::register(signal_hook::consts::SIGTERM, sigterm_handler) }
             .context("Failed to register SIGTERM handler")?;
-        unsafe { signal_hook::register(signal_hook::SIGINT, sigterm_handler) }
+        unsafe { signal_hook::low_level::register(signal_hook::consts::SIGINT, sigterm_handler) }
             .context("Failed to register SIGINT handler")?;
 
         // Start a child process to setup the sandbox
@@ -85,7 +85,7 @@ impl Sandbox for LinuxSandbox {
     }
 }
 fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
-    let tempdir = tempdir::TempDir::new("tabox").context("Failed to create sandbox tempdir")?;
+    let tempdir = tempfile::tempdir().context("Failed to create sandbox tempdir")?;
     let sandbox_path = tempdir.path();
 
     // uid/gid from outside the sandbox

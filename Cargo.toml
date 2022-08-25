@@ -29,15 +29,15 @@ log = "0.4"
 core_affinity = "0.5"
 errno = "0.2"
 libc = "0.2"
-tempdir = "0.3"
-nix = "0.24"
+tempfile = "3.3"
+nix = "0.25"
 anyhow = "1"
-signal-hook = "0.1"
+signal-hook = "0.3"
 lazy_static = "1.4"
 
 # tabox binary dependencies
 structopt = { version = "0.3", optional = true }
-env_logger = { version = "0.7", optional = true }
+env_logger = { version = "0.9", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 seccomp-sys = "0.1"
