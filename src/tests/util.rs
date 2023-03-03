@@ -20,7 +20,7 @@ pub struct ExecutionResult {
 }
 
 pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> ExecutionResult {
-    let temp = tempdir::TempDir::new("temp").unwrap();
+    let temp = tempfile::TempDir::new().unwrap();
 
     let source_path = temp.path().join("program.c");
     fs::write(&source_path, program).unwrap();

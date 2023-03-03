@@ -85,7 +85,7 @@ impl Sandbox for LinuxSandbox {
     }
 }
 fn watcher(config: SandboxConfiguration) -> Result<SandboxExecutionResult> {
-    let tempdir = tempdir::TempDir::new("tabox").context("Failed to create sandbox tempdir")?;
+    let tempdir = tempfile::TempDir::new().context("Failed to create sandbox tempdir")?;
     let sandbox_path = tempdir.path();
 
     // uid/gid from outside the sandbox
