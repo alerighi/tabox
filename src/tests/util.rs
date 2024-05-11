@@ -27,7 +27,7 @@ pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> Ex
 
     let executable_path = temp.path().join("program");
     let compile_output = Command::new("gcc")
-        .args(&[
+        .args([
             "-o",
             executable_path.to_str().unwrap(),
             source_path.to_str().unwrap(),
@@ -72,8 +72,8 @@ pub fn exec(program: &str, config: &mut SandboxConfiguration, stdin: &str) -> Ex
 
     let execution_result = ExecutionResult {
         result,
-        stdout: fs::read_to_string(&config.stdout.unwrap()).unwrap(),
-        stderr: fs::read_to_string(&config.stderr.unwrap()).unwrap(),
+        stdout: fs::read_to_string(config.stdout.unwrap()).unwrap(),
+        stderr: fs::read_to_string(config.stderr.unwrap()).unwrap(),
     };
     eprintln!("Result = {:?}", execution_result);
     execution_result
