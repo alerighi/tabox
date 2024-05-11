@@ -26,18 +26,16 @@ binary = ["structopt", "env_logger"]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"
-core_affinity = "0.5"
-errno = "0.2"
 libc = "0.2"
 tempfile = "3.4"
-nix = "0.24"
+nix = { version = "0.28", features = ["mount", "fs", "user", "sched", "signal"] }
 anyhow = "1"
 signal-hook = "0.1"
 lazy_static = "1.4"
 
 # tabox binary dependencies
 structopt = { version = "0.3", optional = true }
-env_logger = { version = "0.7", optional = true }
+env_logger = { version = "0.11", optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 seccomp-sys = "0.1"
