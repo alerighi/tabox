@@ -131,12 +131,8 @@ pub fn start_wall_time_watcher(limit: u64, child_pid: i32, killed: Arc<AtomicBoo
 }
 
 /// Read the error from errno and using `libc::strerror` obtain a string representation of it.
-pub fn strerror() -> String {
-    unsafe {
-        let err = libc::strerror(nix::errno::errno());
-        let str = std::ffi::CStr::from_ptr(std::mem::transmute(err));
-        str.to_str().unwrap().into()
-    }
+pub fn strerror() -> &'static str {
+    nix::errno::Errno::last().desc()
 }
 
 #[cfg(unix)]
@@ -153,7 +149,6 @@ mod unix {
 pub fn strsignal(signal: i32) -> Option<String> {
     #[cfg(unix)]
     {
-        use nix::NixPath;
         unsafe {
             let cstr = std::ffi::CStr::from_ptr(unix::strsignal(signal));
             if cstr.is_empty() {
