@@ -44,8 +44,11 @@ impl SeccompFilter {
         let syscall_name = CString::new(name).unwrap();
         let syscall_num =
             unsafe { seccomp_sys::seccomp_syscall_resolve_name(syscall_name.as_ptr()) };
-        if syscall_num < 0 {
-            bail!("Error calling seccomp_syscall_resolve_name: {}", strerror());
+        if syscall_num == seccomp_sys::__NR_SCMP_ERROR {
+            bail!(
+                "Error calling seccomp_syscall_resolve_name: unknown system call: {}",
+                name
+            );
         }
         if unsafe {
             seccomp_sys::seccomp_rule_add(self.ctx, action.to_seccomp_param(), syscall_num, 0)
