@@ -5,6 +5,12 @@ file, You can obtain one at http://mozilla.org/MPL/2.0/.
 SPDX-License-Identifier: MPL-2.0
 -->
 
+# WARNING
+
+This project is no longer maintained.
+
+Please submit issues and pull requests to the maintained fork at [olimpiadi-informatica/tabox](https://github.com/olimpiadi-informatica/tabox).
+
 # tabox
 
 [![Docs]( https://docs.rs/tabox/badge.svg)]( https://docs.rs/tabox)
